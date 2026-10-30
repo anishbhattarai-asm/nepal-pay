@@ -1,6 +1,6 @@
 {
   "name": "@nepalpay/esewa",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "description": "Unofficial zero-dependency eSewa ePay v2 SDK for Node.js and edge runtimes",
   "keywords": [
     "esewa",

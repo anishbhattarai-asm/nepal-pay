@@ -98,6 +98,7 @@ password `Nepal@123`, token `123456`.
 
 ## Changelog
 
+- **0.2.2**: First release built and staged by GitHub Actions, with npm provenance.
 - **0.2.1**: Documentation only.
 - **0.2.0**: `paymentAttemptId()` for retries. `https` callback URLs in production (breaking for `http`).
   Product code and transaction id matching, 4 KB callback and 1 MB reply limits, browser worker detection.
