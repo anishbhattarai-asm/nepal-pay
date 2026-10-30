@@ -17,7 +17,11 @@ const khaltiKey = process.env.KHALTI_SECRET_KEY;
 const khalti = khaltiKey ? createKhalti({ environment: 'sandbox', secretKey: khaltiKey, websiteUrl: baseUrl }) : null;
 
 const { app } = createApp({ esewa, khalti, baseUrl });
-app.listen(port, () => {
+app.listen(port, (err) => {
+  if (err) {
+    console.error(`Could not start the demo on port ${port}: ${err.code ?? err.message}. Is another copy running?`);
+    process.exit(1);
+  }
   console.log(`nepal-pay demo on ${baseUrl}`);
   console.log(khalti ? 'Khalti: sandbox' : 'Khalti: off (set KHALTI_SECRET_KEY to enable)');
 });
