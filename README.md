@@ -175,9 +175,10 @@ npm run test:live    # real eSewa and Khalti sandboxes
 npm run demo         # http://localhost:3000; KHALTI_SECRET_KEY enables Khalti
 ```
 
-Releases are published by the **Release** workflow (Actions tab, Run workflow) through npm trusted
-publishing, so each version carries a provenance attestation. The workflow runs `npm run release`:
-the full check, then a publish of every package whose version is not on npm yet.
+Releases go through the **Release** workflow (Actions tab, Run workflow). It runs the full check and
+stages every package whose version is not on npm yet, using npm trusted publishing with provenance.
+A staged version goes live after approval with 2FA on npmjs.com (Staged Packages) or with
+`npm stage approve`.
 
 Sandbox credentials: eSewa uses the public product code `EPAYTEST` and secret `8gBm/:&EnhH.1/q`;
 Khalti keys come from [test-admin.khalti.com](https://test-admin.khalti.com/#/join/merchant).

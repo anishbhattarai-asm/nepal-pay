@@ -5,7 +5,7 @@ permissions:
   contents: read
   id-token: write
 jobs:
-  publish:
+  stage:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -14,4 +14,5 @@ jobs:
           node-version: 26
           registry-url: https://registry.npmjs.org
       - run: npm ci
-      - run: npm run release
+      - run: npm run check
+      - run: node scripts/release.mjs --stage

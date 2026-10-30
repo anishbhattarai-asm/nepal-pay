@@ -1,18 +1,25 @@
-// Publishes every package whose current version is not on npm yet. Pass --dry-run to only show what would happen.
+// Publishes every package whose current version is not on npm yet.
+// --stage: stages instead (npm stage publish); the release goes live after approval with 2FA on npm.
+// --dry-run: shows what would happen.
 import { execFileSync, execSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
 
 const PACKAGES = ['core', 'esewa', 'khalti']; // core first: the others depend on it
 const dryRun = process.argv.includes('--dry-run');
+const stage = process.argv.includes('--stage');
 
 for (const dir of PACKAGES) {
-  const { name, version } = JSON.parse(readFileSync(new URL(`../packages/${dir}/package.json`, import.meta.url), 'utf8'));
+  const pkgDir = fileURLToPath(new URL(`../packages/${dir}/`, import.meta.url));
+  const { name, version } = JSON.parse(readFileSync(`${pkgDir}package.json`, 'utf8'));
   if (isPublished(name, version)) {
     console.log(`skip     ${name}@${version} (already on npm)`);
     continue;
   }
-  console.log(`publish  ${name}@${version}${dryRun ? ' (dry run)' : ''}`);
-  npm(['publish', '-w', name, ...(dryRun ? ['--dry-run'] : [])], { stdio: 'inherit' });
+  console.log(`${stage ? 'stage' : 'publish'}  ${name}@${version}${dryRun ? ' (dry run)' : ''}`);
+  const flags = dryRun ? ['--dry-run'] : [];
+  if (stage) npm(['stage', 'publish', ...flags], { stdio: 'inherit', cwd: pkgDir });
+  else npm(['publish', '-w', name, ...flags], { stdio: 'inherit' });
 }
 
 function isPublished(name, version) {
