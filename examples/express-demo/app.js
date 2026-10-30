@@ -8,7 +8,8 @@ import { isPaymentError } from '@anishbhattarai/esewa';
 export function createApp({ esewa, khalti, baseUrl }) {
   const orders = new Map();
   const app = express();
-  app.use(express.urlencoded({ extended: false }));
+  // Forms are never compressed; refusing compressed bodies keeps client bytes away from zlib (CVE-2026-111497).
+  app.use(express.urlencoded({ extended: false, inflate: false }));
 
   function createOrder(gateway, amount) {
     const id = `ORD-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
@@ -111,6 +112,9 @@ export function createApp({ esewa, khalti, baseUrl }) {
       return res
         .status(status)
         .send(page('Payment error', `<p><code>${escapeHtml(err.code)}</code> ${escapeHtml(err.message)}</p>`));
+    }
+    if (err.status >= 400 && err.status < 500) {
+      return res.status(err.status).send(page('Bad request', `<p>${escapeHtml(err.message)}</p>`));
     }
     console.error(err);
     res.status(500).send(page('Server error', '<p>Something went wrong.</p>'));

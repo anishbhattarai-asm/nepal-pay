@@ -24,14 +24,12 @@
     "test:live": "npm run test:live --workspaces --if-present",
     "check": "npm run build && npm run typecheck && npm test",
     "demo": "npm run build && npm start -w express-demo",
-    "changeset": "changeset",
-    "release": "npm run build && changeset publish"
+    "release": "npm run check && npm publish -w @anishbhattarai/core -w @anishbhattarai/esewa -w @anishbhattarai/khalti"
   },
   "engines": {
-    "node": ">=20"
+    "node": ">=22"
   },
   "devDependencies": {
-    "@changesets/cli": "^2.31.1",
     "@types/node": "^26.6.6",
     "tsup": "^8.5.1",
     "typescript": "~5.9.3",

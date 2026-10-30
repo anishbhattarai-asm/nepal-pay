@@ -1,6 +1,6 @@
 # @anishbhattarai/esewa
 
-Unofficial, zero-dependency eSewa ePay v2 SDK for Node.js 20+ and edge runtimes. Not affiliated with eSewa.
+Unofficial, zero-dependency eSewa ePay v2 SDK for Node.js 22+ (a patched release) and edge runtimes. Not affiliated with eSewa.
 
 ```sh
 npm i @anishbhattarai/esewa

@@ -2,6 +2,7 @@
 import assert from 'node:assert/strict';
 import { createHmac } from 'node:crypto';
 import { createServer } from 'node:http';
+import { brotliCompressSync } from 'node:zlib';
 import { after, before, describe, it } from 'node:test';
 import { createEsewa } from '@anishbhattarai/esewa';
 import { createApp } from './app.js';
@@ -132,6 +133,17 @@ describe('express demo against the eSewa sandbox', { timeout: 60_000 }, () => {
       assert.equal(res.status, 400, `amount ${JSON.stringify(amount)}`);
       assert.match(await res.text(), /INVALID_INPUT/);
     }
+    assert.equal(orders.size, before);
+  });
+
+  it('refuses compressed request bodies (415) without creating an order', async () => {
+    const before = orders.size;
+    const res = await fetch(`${base}/pay/esewa`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'Content-Encoding': 'br' },
+      body: brotliCompressSync('amount=100'),
+    });
+    assert.equal(res.status, 415);
     assert.equal(orders.size, before);
   });
 

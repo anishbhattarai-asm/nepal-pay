@@ -1,6 +1,6 @@
 # @anishbhattarai/khalti
 
-Unofficial, zero-dependency Khalti KPG-2 (ePayment) SDK for Node.js 20+ and edge runtimes. Not affiliated with Khalti.
+Unofficial, zero-dependency Khalti KPG-2 (ePayment) SDK for Node.js 22+ (a patched release) and edge runtimes. Not affiliated with Khalti.
 
 ```sh
 npm i @anishbhattarai/khalti

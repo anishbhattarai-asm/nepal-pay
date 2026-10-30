@@ -24,3 +24,12 @@ npm run demo        # Express demo on http://localhost:3000
 set `KHALTI_SECRET_KEY` (from test-admin.khalti.com) to include Khalti's full flow.
 
 TypeScript is pinned to 5.9: tsup's declaration build does not work with TypeScript 7.
+
+## Releasing
+
+```sh
+npm version patch -w @anishbhattarai/esewa   # bump only the packages that changed
+npm run release                               # check, then publish core, esewa and khalti
+```
+
+When core gets a new minor version, update the `@anishbhattarai/core` range in esewa and khalti too.

@@ -2,7 +2,7 @@
 
 ## Packages
 - core: shared types, PaymentError (with codes), status enum, HTTP helper, money + guard helpers.
-- esewa / khalti: one package per gateway, versioned independently via Changesets.
+- esewa / khalti: one package per gateway, versioned independently with npm version.
   Each depends only on core. No other runtime dependencies.
 
 ## Every gateway client exposes the same shape
@@ -17,7 +17,7 @@
 4. Secrets never run in a browser -> BROWSER_ENVIRONMENT error.
 5. Errors are checked by err.code, not instanceof (safe across package copies).
 6. fetch is injectable for tests, proxies and logging.
-7. Web Crypto + native fetch only, so it runs on Node 20+ and edge runtimes.
+7. Web Crypto + native fetch only, so it runs on Node 22+ and edge runtimes.
 
 ## Status mapping
 COMPLETED | PENDING | FAILED | REFUNDED | CANCELED, with the original response kept in raw.

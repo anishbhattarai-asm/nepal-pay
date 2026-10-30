@@ -1,6 +1,6 @@
 {
   "name": "@anishbhattarai/core",
-  "version": "0.0.0",
+  "version": "0.1.0",
   "description": "Shared types and utilities for @anishbhattarai Nepal payment gateway SDKs (unofficial)",
   "author": "Anish Bhattarai",
   "license": "MIT",
@@ -34,12 +34,13 @@
   ],
   "sideEffects": false,
   "engines": {
-    "node": ">=20"
+    "node": ">=22"
   },
   "scripts": {
     "build": "tsup",
     "typecheck": "tsc",
-    "test": "vitest run --passWithNoTests --exclude \"**/live/**\""
+    "test": "vitest run --passWithNoTests --exclude \"**/live/**\"",
+    "prepublishOnly": "npm run build"
   },
   "publishConfig": {
     "access": "public"
