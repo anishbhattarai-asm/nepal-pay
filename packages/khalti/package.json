@@ -1,0 +1,57 @@
+{
+  "name": "@anishbhattarai/khalti",
+  "version": "0.0.0",
+  "description": "Unofficial zero-dependency Khalti KPG-2 SDK for Node.js and edge runtimes",
+  "keywords": [
+    "khalti",
+    "nepal",
+    "payment",
+    "kpg"
+  ],
+  "author": "Anish Bhattarai",
+  "license": "MIT",
+  "homepage": "https://github.com/anishbhattarai-asm/nepal-pay/tree/main/packages/khalti#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/anishbhattarai-asm/nepal-pay.git",
+    "directory": "packages/khalti"
+  },
+  "bugs": {
+    "url": "https://github.com/anishbhattarai-asm/nepal-pay/issues"
+  },
+  "type": "module",
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.js"
+      },
+      "require": {
+        "types": "./dist/index.d.cts",
+        "default": "./dist/index.cjs"
+      }
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "sideEffects": false,
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "@anishbhattarai/core": "0.0.0"
+  },
+  "scripts": {
+    "build": "tsup",
+    "typecheck": "tsc",
+    "test": "vitest run --passWithNoTests --exclude \"**/live/**\"",
+    "test:live": "vitest run tests/live"
+  },
+  "publishConfig": {
+    "access": "public"
+  }
+}
