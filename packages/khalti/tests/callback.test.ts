@@ -43,6 +43,31 @@ describe('khalti.parseCallback', () => {
     });
   });
 
+  it('reads a callback captured from a real sandbox payment', async () => {
+    // Recorded 2026-10-31 from a Rs 100 sandbox payment; the mobile number is masked.
+    const real = {
+      pidx: 'kMz6UsMqChP3EjGyBNpi3h',
+      transaction_id: 'AhDTwUwX883j3skXnFgTyD',
+      tidx: 'AhDTwUwX883j3skXnFgTyD',
+      txnId: 'AhDTwUwX883j3skXnFgTyD',
+      amount: '10000',
+      total_amount: '10000',
+      mobile: '98XXXXXXXX',
+      status: 'Completed',
+      purchase_order_id: 'ORD-262baabd0c9b4215-vsvdjl56',
+      purchase_order_name: 'nepal-pay demo order',
+    };
+    await expect(khalti.parseCallback(real)).resolves.toEqual({
+      reference: 'kMz6UsMqChP3EjGyBNpi3h',
+      orderId: 'ORD-262baabd0c9b4215-vsvdjl56',
+      transactionId: 'AhDTwUwX883j3skXnFgTyD',
+      claimedStatus: 'COMPLETED',
+      amount: 100,
+      signatureValid: null,
+      raw: real,
+    });
+  });
+
   it('reads a cancelled payment', async () => {
     await expect(
       khalti.parseCallback({ pidx: 'vNTeXkSEaEXK2J4i7cQU6e', status: 'User canceled', purchase_order_id: 'ORD-9' }),

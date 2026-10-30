@@ -1,6 +1,6 @@
 import { PaymentStatus } from '@nepalpay/core';
 
-/** Khalti lookup/callback status values -> common status. Case-insensitive: Khalti's own docs mix "Partially refunded" and "Partially Refunded". */
+/** Maps Khalti statuses to PaymentStatus, case-insensitively (Khalti mixes "Partially refunded" casing). */
 export function mapKhaltiStatus(status: string | undefined): PaymentStatus {
   switch ((status ?? '').trim().toLowerCase()) {
     case 'completed':

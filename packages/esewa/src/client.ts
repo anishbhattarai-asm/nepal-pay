@@ -19,19 +19,16 @@ import { DEFAULT_SIGNED_FIELDS, sign, verifySignature } from './signing';
 
 const GATEWAY = 'esewa';
 
-/** transaction_uuid goes into a comma-joined signed message and a query string, so keep it to safe characters. */
+/** Characters allowed in transaction_uuid (it goes into the signed message and a query string). */
 const ORDER_ID_PATTERN = /^[A-Za-z0-9_-]+$/;
 
-/**
- * The callback names its own signed fields, so a signature over fewer fields (such as the one on the
- * initiate form the customer can see) must not vouch for the fields parseCallback reports.
- */
+/** Fields a callback signature must cover; a narrower signature (such as the form's) is rejected. */
 const REQUIRED_SIGNED_FIELDS = ['status', 'total_amount', 'transaction_uuid', 'product_code'];
 
 export interface EsewaVerifyInput {
   /** The transaction_uuid you sent (your orderId). */
   orderId: string;
-  /** Amount in rupees you EXPECT. eSewa's status API also needs it. */
+  /** Expected amount in rupees; also part of eSewa's status query. */
   amount: number;
 }
 
@@ -96,7 +93,7 @@ export function createEsewa(config: EsewaConfig): EsewaClient {
       if (!isRecord(res) || typeof res.status !== 'string') {
         throw gatewayError('unexpected status response', res);
       }
-      // eSewa echoes both back; a reply that does not is not about this payment.
+      // The reply must echo this transaction and product code.
       if (String(res.transaction_uuid ?? '') !== input.orderId) {
         throw gatewayError('status response is for a different transaction', res);
       }
@@ -106,7 +103,7 @@ export function createEsewa(config: EsewaConfig): EsewaClient {
       const amount = parseAmount(res.total_amount);
       if (amount === undefined) throw gatewayError('status response has no total_amount', res);
 
-      // eSewa answers NOT_FOUND (-> FAILED) when the amount is wrong, so this mainly guards a bad response.
+      // eSewa answers NOT_FOUND for a wrong amount; this check covers a malformed reply.
       const status = mapEsewaStatus(res.status);
       if (status === PaymentStatus.COMPLETED && !sameAmount(amount, input.amount)) {
         throw new PaymentError('AMOUNT_MISMATCH', `esewa: paid ${amount} but expected ${input.amount}`, {

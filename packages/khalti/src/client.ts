@@ -26,7 +26,7 @@ const MIN_PAISA = 1000;
 
 export interface KhaltiVerifyInput {
   pidx: string;
-  /** Amount in rupees you EXPECT. Required so tampering is always caught. */
+  /** Expected amount in rupees; a completed payment for another amount throws AMOUNT_MISMATCH. */
   expectedAmount: number;
 }
 
@@ -79,7 +79,7 @@ export function createKhalti(config: KhaltiConfig): KhaltiClient {
       if (!isRecord(res) || typeof res.pidx !== 'string' || res.pidx === '' || typeof res.payment_url !== 'string') {
         throw gatewayError('initiate response has no pidx or payment_url', res);
       }
-      // The app redirects the customer here, so never pass on anything but an https URL.
+      // Only https payment URLs are returned to the caller.
       if (!isHttpsUrl(res.payment_url)) throw gatewayError('payment_url is not an https URL', res);
       return { type: 'redirect', url: res.payment_url, reference: res.pidx, raw: res };
     },

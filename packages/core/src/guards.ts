@@ -1,10 +1,6 @@
 import { PaymentError, type PaymentErrorCode } from './errors';
 
-/**
- * Catches a client (and its secret key) bundled into browser code: a page has window and document,
- * a web or service worker has importScripts. A mistake detector, not a security boundary: a key that
- * reached a browser is already exposed.
- */
+/** Throws BROWSER_ENVIRONMENT in a browser page or worker. Detects misuse; not a security boundary. */
 export function assertServerSide(gateway: string): void {
   const g = globalThis as { window?: unknown; document?: unknown; importScripts?: unknown };
   const browserPage = typeof g.window !== 'undefined' && typeof g.document !== 'undefined';
@@ -29,7 +25,7 @@ export function assertNonEmpty(
   }
 }
 
-/** `requireHttps` is for production, where callbacks must not travel in plain text. */
+/** Accepts absolute http(s) URLs; only https when `requireHttps` is set (production). */
 export function assertHttpUrl(
   value: unknown,
   field: string,

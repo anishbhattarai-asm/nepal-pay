@@ -29,6 +29,25 @@ describe('khalti.verify', () => {
     });
   });
 
+  it('confirms a lookup reply captured from a real sandbox payment', async () => {
+    // Recorded 2026-10-31 from the same Rs 100 sandbox payment; fee is in paisa.
+    const real = {
+      pidx: 'kMz6UsMqChP3EjGyBNpi3h',
+      total_amount: 10000,
+      status: 'Completed',
+      transaction_id: 'AhDTwUwX883j3skXnFgTyD',
+      fee: 300,
+      refunded: false,
+    };
+    const { khalti } = setup(jsonResponse(real));
+    await expect(khalti.verify({ pidx: 'kMz6UsMqChP3EjGyBNpi3h', expectedAmount: 100 })).resolves.toEqual({
+      status: 'COMPLETED',
+      amount: 100,
+      transactionId: 'AhDTwUwX883j3skXnFgTyD',
+      raw: real,
+    });
+  });
+
   it('uses the production lookup URL in production', async () => {
     const { fetch, calls } = mockFetch(jsonResponse(lookupBody('Completed')));
     await createKhalti({ ...SANDBOX, environment: 'production', fetch }).verify(input);

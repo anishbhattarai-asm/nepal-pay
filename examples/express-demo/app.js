@@ -3,14 +3,8 @@ import express from 'express';
 import { isPaymentError, paymentAttemptId } from '@nepalpay/esewa';
 
 /**
- * Demo checkout for eSewa and Khalti. Orders live in memory; a real app keeps them in its database.
- *
- * One order can have many payment attempts ("pay again" after a failed or abandoned payment):
- * - every attempt gets its own id, because eSewa rejects a reused transaction_uuid;
- * - before a new attempt, earlier ones are checked with the gateway, so a payment that went
- *   through late is never charged twice;
- * - a callback is matched by its attempt reference (eSewa transaction_uuid, Khalti pidx), and an
- *   order is only marked paid after verify() says COMPLETED.
+ * Demo checkout with in-memory orders. Each order has one or more payment attempts with unique ids;
+ * earlier attempts are re-verified before a new one starts, and an order is paid only after verify().
  */
 export function createApp({ esewa, khalti, baseUrl, maxOrders = 500 }) {
   const orders = new Map(); // order id -> order
@@ -60,7 +54,7 @@ export function createApp({ esewa, khalti, baseUrl, maxOrders = 500 }) {
     return order;
   }
 
-  /** Before charging again, make sure no earlier attempt went through in the meantime. */
+  /** Re-verifies earlier attempts, so a payment that completed late is not charged twice. */
   async function refreshAttempts(order) {
     for (const attempt of order.attempts) {
       if (attempt.status !== 'COMPLETED' && attempt.status !== 'REFUNDED') await check(attempt);
@@ -117,7 +111,7 @@ export function createApp({ esewa, khalti, baseUrl, maxOrders = 500 }) {
 
   app.get('/esewa/callback', async (req, res) => {
     const claim = await esewa.parseCallback({ data: firstString(req.query.data) });
-    console.log('[esewa] signed callback', claim.raw);
+    console.log('[esewa] callback', claim.reference, claim.claimedStatus);
     const attempt = attempts.get(claim.reference);
     if (!attempt || attempt.gateway !== 'esewa') {
       return res.status(404).send(page('Unknown payment', '<p>No eSewa payment matches this callback.</p>'));
@@ -156,8 +150,8 @@ export function createApp({ esewa, khalti, baseUrl, maxOrders = 500 }) {
   app.get('/khalti/callback', async (req, res) => {
     if (!khalti) return res.status(503).send(khaltiOff());
     const claim = await khalti.parseCallback(req.query);
-    console.log('[khalti] callback', claim.raw);
-    // The redirect is unsigned: match it by the pidx stored at initiate, never by purchase_order_id.
+    console.log('[khalti] callback', claim.reference, claim.claimedStatus); // raw params include the payer's mobile
+    // Unsigned redirect: matched by the stored pidx, not by purchase_order_id.
     const attempt = attempts.get(claim.reference);
     if (!attempt || attempt.gateway !== 'khalti') {
       return res.status(404).send(page('Unknown payment', '<p>No Khalti payment matches this callback.</p>'));

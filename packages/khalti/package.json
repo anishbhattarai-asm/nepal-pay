@@ -1,6 +1,6 @@
 {
   "name": "@nepalpay/khalti",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "Unofficial zero-dependency Khalti KPG-2 SDK for Node.js and edge runtimes",
   "keywords": [
     "khalti",
