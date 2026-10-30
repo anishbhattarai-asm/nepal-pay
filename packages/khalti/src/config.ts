@@ -1,4 +1,4 @@
-import { assertHttpUrl, assertNonEmpty, PaymentError, type BaseConfig, type FetchLike } from '@anishbhattarai/core';
+import { assertHttpUrl, assertNonEmpty, PaymentError, type BaseConfig, type FetchLike } from '@nepalpay/core';
 
 export interface KhaltiConfig extends BaseConfig {
   /** Live or test secret key from the Khalti merchant dashboard. */

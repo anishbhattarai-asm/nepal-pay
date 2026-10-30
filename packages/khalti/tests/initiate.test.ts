@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { InitiateInput } from '@anishbhattarai/core';
+import type { InitiateInput } from '@nepalpay/core';
 import { createKhalti } from '../src/client';
 import { jsonResponse, mockFetch, SANDBOX } from './helpers';
 

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { InitiateResult } from '@anishbhattarai/core';
+import type { InitiateResult } from '@nepalpay/core';
 import { createEsewa } from '../../src';
 import { UAT } from '../helpers';
 

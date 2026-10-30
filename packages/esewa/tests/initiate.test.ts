@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { InitiateInput, InitiateResult } from '@anishbhattarai/core';
+import type { InitiateInput, InitiateResult } from '@nepalpay/core';
 import { createEsewa } from '../src/client';
 import { mockFetch, nodeHmac, UAT } from './helpers';
 

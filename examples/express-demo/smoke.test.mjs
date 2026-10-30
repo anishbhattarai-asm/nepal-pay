@@ -4,7 +4,7 @@ import { createHmac } from 'node:crypto';
 import { createServer } from 'node:http';
 import { brotliCompressSync } from 'node:zlib';
 import { after, before, describe, it } from 'node:test';
-import { createEsewa } from '@anishbhattarai/esewa';
+import { createEsewa } from '@nepalpay/esewa';
 import { createApp } from './app.js';
 
 const UAT = { productCode: 'EPAYTEST', secretKey: '8gBm/:&EnhH.1/q' };

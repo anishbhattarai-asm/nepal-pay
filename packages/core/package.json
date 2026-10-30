@@ -1,7 +1,7 @@
 {
-  "name": "@anishbhattarai/core",
+  "name": "@nepalpay/core",
   "version": "0.1.0",
-  "description": "Shared types and utilities for @anishbhattarai Nepal payment gateway SDKs (unofficial)",
+  "description": "Shared types and utilities for the @nepalpay payment gateway SDKs (unofficial)",
   "author": "Anish Bhattarai",
   "license": "MIT",
   "homepage": "https://github.com/anishbhattarai-asm/nepal-pay/tree/main/packages/core#readme",

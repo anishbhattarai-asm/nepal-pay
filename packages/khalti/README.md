@@ -1,15 +1,15 @@
-# @anishbhattarai/khalti
+# @nepalpay/khalti
 
 Unofficial, zero-dependency Khalti KPG-2 (ePayment) SDK for Node.js 22+ (a patched release) and edge runtimes. Not affiliated with Khalti.
 
 ```sh
-npm i @anishbhattarai/khalti
+npm i @nepalpay/khalti
 ```
 
 ## Usage
 
 ```ts
-import { createKhalti, isPaymentError } from '@anishbhattarai/khalti';
+import { createKhalti, isPaymentError } from '@nepalpay/khalti';
 
 const khalti = createKhalti({
   environment: 'sandbox', // or 'production'; required, no default

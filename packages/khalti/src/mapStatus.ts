@@ -1,4 +1,4 @@
-import { PaymentStatus } from '@anishbhattarai/core';
+import { PaymentStatus } from '@nepalpay/core';
 
 /** Khalti lookup/callback status values -> common status. Case-insensitive: Khalti's own docs mix "Partially refunded" and "Partially Refunded". */
 export function mapKhaltiStatus(status: string | undefined): PaymentStatus {

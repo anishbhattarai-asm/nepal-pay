@@ -1,4 +1,4 @@
-import { PaymentStatus } from '@anishbhattarai/core';
+import { PaymentStatus } from '@nepalpay/core';
 
 /** eSewa status-API values -> common status. */
 export function mapEsewaStatus(status: string | undefined): PaymentStatus {

@@ -1,4 +1,4 @@
-import { assertNonEmpty, PaymentError, type BaseConfig, type FetchLike } from '@anishbhattarai/core';
+import { assertNonEmpty, PaymentError, type BaseConfig, type FetchLike } from '@nepalpay/core';
 
 export interface EsewaConfig extends BaseConfig {
   /** Merchant product code (EPAYTEST in sandbox). */

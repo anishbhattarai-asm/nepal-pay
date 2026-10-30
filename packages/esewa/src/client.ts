@@ -11,7 +11,7 @@ import {
   requestJson,
   sameAmount,
   type PaymentGateway,
-} from '@anishbhattarai/core';
+} from '@nepalpay/core';
 import { decodeCallbackData } from './callback';
 import { resolveConfig, type EsewaConfig } from './config';
 import { mapEsewaStatus } from './mapStatus';

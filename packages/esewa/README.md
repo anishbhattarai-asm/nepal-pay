@@ -1,15 +1,15 @@
-# @anishbhattarai/esewa
+# @nepalpay/esewa
 
 Unofficial, zero-dependency eSewa ePay v2 SDK for Node.js 22+ (a patched release) and edge runtimes. Not affiliated with eSewa.
 
 ```sh
-npm i @anishbhattarai/esewa
+npm i @nepalpay/esewa
 ```
 
 ## Usage
 
 ```ts
-import { createEsewa, isPaymentError } from '@anishbhattarai/esewa';
+import { createEsewa, isPaymentError } from '@nepalpay/esewa';
 
 const esewa = createEsewa({
   environment: 'sandbox', // or 'production'; required, no default

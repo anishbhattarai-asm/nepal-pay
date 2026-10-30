@@ -1,4 +1,4 @@
-import { PaymentError } from '@anishbhattarai/core';
+import { PaymentError } from '@nepalpay/core';
 
 export const DEFAULT_SIGNED_FIELDS = 'total_amount,transaction_uuid,product_code';
 

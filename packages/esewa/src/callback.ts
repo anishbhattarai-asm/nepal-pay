@@ -1,4 +1,4 @@
-import { isRecord, PaymentError } from '@anishbhattarai/core';
+import { isRecord, PaymentError } from '@nepalpay/core';
 
 const invalid = (message: string, cause?: unknown) =>
   new PaymentError('INVALID_INPUT', `esewa: ${message}`, { gateway: 'esewa', cause });

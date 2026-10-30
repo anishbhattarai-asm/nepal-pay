@@ -5,9 +5,9 @@ Not affiliated with eSewa or Khalti.
 
 | Package | Gateway |
 |-|-|
-| `@anishbhattarai/esewa` | eSewa ePay v2 |
-| `@anishbhattarai/khalti` | Khalti KPG-2 |
-| `@anishbhattarai/core` | Shared types, errors, HTTP (installed automatically) |
+| `@nepalpay/esewa` | eSewa ePay v2 |
+| `@nepalpay/khalti` | Khalti KPG-2 |
+| `@nepalpay/core` | Shared types, errors, HTTP (installed automatically) |
 
 See ARCHITECTURE.md for design decisions and each package's README for usage.
 
@@ -28,8 +28,8 @@ TypeScript is pinned to 5.9: tsup's declaration build does not work with TypeScr
 ## Releasing
 
 ```sh
-npm version patch -w @anishbhattarai/esewa   # bump only the packages that changed
-npm run release                               # check, then publish core, esewa and khalti
+npm version patch -w @nepalpay/esewa   # bump only the packages that changed
+npm run release                        # check, then publish core, esewa and khalti
 ```
 
-When core gets a new minor version, update the `@anishbhattarai/core` range in esewa and khalti too.
+When core gets a new minor version, update the `@nepalpay/core` range in esewa and khalti too.

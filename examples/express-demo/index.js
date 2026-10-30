@@ -1,5 +1,5 @@
-import { createEsewa } from '@anishbhattarai/esewa';
-import { createKhalti } from '@anishbhattarai/khalti';
+import { createEsewa } from '@nepalpay/esewa';
+import { createKhalti } from '@nepalpay/khalti';
 import { createApp } from './app.js';
 
 const port = Number(process.env.PORT ?? 3000);

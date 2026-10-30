@@ -1,5 +1,5 @@
 import express from 'express';
-import { isPaymentError } from '@anishbhattarai/esewa';
+import { isPaymentError } from '@nepalpay/esewa';
 
 /**
  * Demo checkout for eSewa and Khalti. Orders live in memory; a real app keeps them in its database.

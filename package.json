@@ -24,7 +24,7 @@
     "test:live": "npm run test:live --workspaces --if-present",
     "check": "npm run build && npm run typecheck && npm test",
     "demo": "npm run build && npm start -w express-demo",
-    "release": "npm run check && npm publish -w @anishbhattarai/core -w @anishbhattarai/esewa -w @anishbhattarai/khalti"
+    "release": "npm run check && npm publish -w @nepalpay/core -w @nepalpay/esewa -w @nepalpay/khalti"
   },
   "engines": {
     "node": ">=22"

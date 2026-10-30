@@ -14,7 +14,7 @@ import {
   toPaisa,
   type Customer,
   type PaymentGateway,
-} from '@anishbhattarai/core';
+} from '@nepalpay/core';
 import { resolveConfig, type KhaltiConfig } from './config';
 import { mapKhaltiStatus } from './mapStatus';
 
