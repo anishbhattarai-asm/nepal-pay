@@ -4,6 +4,7 @@ import {
   assertNonEmpty,
   assertServerSide,
   fromPaisa,
+  isHttpsUrl,
   isPaymentError,
   isRecord,
   parseAmount,
@@ -37,6 +38,12 @@ export type KhaltiClient = PaymentGateway<KhaltiVerifyInput, KhaltiCallbackInput
 const gatewayError = (message: string, raw: unknown) =>
   new PaymentError('GATEWAY_ERROR', `khalti: ${message}`, { gateway: GATEWAY, details: raw });
 
+/** Khalti amounts are whole paisa; anything else is not a real amount. */
+function parsePaisa(value: unknown): number | undefined {
+  const paisa = parseAmount(value);
+  return paisa !== undefined && Number.isSafeInteger(paisa) && paisa >= 0 ? paisa : undefined;
+}
+
 export function createKhalti(config: KhaltiConfig): KhaltiClient {
   assertServerSide(GATEWAY);
   const cfg = resolveConfig(config);
@@ -58,7 +65,7 @@ export function createKhalti(config: KhaltiConfig): KhaltiClient {
         throw new PaymentError('INVALID_INPUT', 'khalti: minimum amount is Rs 10', { gateway: GATEWAY });
       }
       assertNonEmpty(input.orderId, 'orderId', GATEWAY, 'INVALID_INPUT');
-      assertHttpUrl(input.returnUrl, 'returnUrl', GATEWAY);
+      assertHttpUrl(input.returnUrl, 'returnUrl', GATEWAY, 'INVALID_INPUT', cfg.production);
 
       const info = customerInfo(input.customer);
       const res = await post(cfg.urls.initiate, {
@@ -69,9 +76,11 @@ export function createKhalti(config: KhaltiConfig): KhaltiClient {
         purchase_order_name: input.productName?.trim() || input.orderId,
         ...(info ? { customer_info: info } : {}),
       });
-      if (!isRecord(res) || typeof res.pidx !== 'string' || typeof res.payment_url !== 'string') {
+      if (!isRecord(res) || typeof res.pidx !== 'string' || res.pidx === '' || typeof res.payment_url !== 'string') {
         throw gatewayError('initiate response has no pidx or payment_url', res);
       }
+      // The app redirects the customer here, so never pass on anything but an https URL.
+      if (!isHttpsUrl(res.payment_url)) throw gatewayError('payment_url is not an https URL', res);
       return { type: 'redirect', url: res.payment_url, reference: res.pidx, raw: res };
     },
 
@@ -88,11 +97,11 @@ export function createKhalti(config: KhaltiConfig): KhaltiClient {
       if (!isRecord(res) || typeof res.status !== 'string') {
         throw gatewayError('unexpected lookup response', res);
       }
-      if (res.pidx != null && res.pidx !== input.pidx) {
+      if (res.pidx !== input.pidx) {
         throw gatewayError('lookup response is for a different pidx', res);
       }
-      const paisa = parseAmount(res.total_amount);
-      if (paisa === undefined) throw gatewayError('lookup response has no total_amount', res);
+      const paisa = parsePaisa(res.total_amount);
+      if (paisa === undefined) throw gatewayError('lookup response has no whole-paisa total_amount', res);
 
       const amount = fromPaisa(paisa);
       const status = mapKhaltiStatus(res.status);
@@ -118,7 +127,7 @@ export function createKhalti(config: KhaltiConfig): KhaltiClient {
       if (!pidx) {
         throw new PaymentError('INVALID_INPUT', 'khalti: callback has no pidx', { gateway: GATEWAY, details: params });
       }
-      const paisa = parseAmount(params.total_amount ?? params.amount);
+      const paisa = parsePaisa(params.total_amount ?? params.amount);
 
       return {
         reference: pidx,

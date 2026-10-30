@@ -22,7 +22,10 @@ export interface Customer {
 export interface InitiateInput {
   /** Amount in RUPEES (max 2 decimals). */
   amount: number;
-  /** Your unique order / transaction id. */
+  /**
+   * Unique id for THIS payment attempt (eSewa transaction_uuid, Khalti purchase_order_id).
+   * eSewa rejects a reused id, so "pay again" needs a new one: use paymentAttemptId(order.id).
+   */
   orderId: string;
   /** Where the gateway sends the user after paying. */
   returnUrl: string;

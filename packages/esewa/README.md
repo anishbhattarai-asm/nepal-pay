@@ -34,7 +34,7 @@ the standard `fetch` and Web Crypto APIs.
 ```ts
 import express from 'express';
 import escapeHtml from 'escape-html'; // npm i escape-html
-import { createEsewa } from '@nepalpay/esewa';
+import { createEsewa, paymentAttemptId } from '@nepalpay/esewa';
 
 const esewa = createEsewa({
   environment: 'sandbox', // 'production' for real money; there is no default
@@ -44,14 +44,16 @@ const esewa = createEsewa({
 
 const app = express();
 
-// 1. Start the payment: eSewa needs a signed form POSTed from the customer's browser.
-app.post('/pay/esewa', async (req, res) => {
-  const order = await db.orders.create({ amount: 1500 }); // amount in rupees, from your own data
+// 1. Start a payment attempt: eSewa needs a signed form POSTed from the customer's browser.
+app.post('/orders/:id/pay/esewa', async (req, res) => {
+  const order = await db.orders.find(req.params.id); // amount in rupees, from your own data
+  const attemptId = paymentAttemptId(order.id); // a new id for every attempt, see "Paying again"
+  await db.attempts.create({ id: attemptId, orderId: order.id });
   const form = await esewa.initiate({
     amount: order.amount,
-    orderId: order.id, // letters, digits, "-" and "_"
-    returnUrl: 'https://shop.example/esewa/callback',
-    failureUrl: `https://shop.example/esewa/failure/${order.id}`,
+    orderId: attemptId,
+    returnUrl: 'https://shop.example/esewa/callback', // https is required in production
+    failureUrl: `https://shop.example/esewa/failure/${attemptId}`,
   });
   if (form.type !== 'form') throw new Error('unexpected');
   const inputs = Object.entries(form.fields)
@@ -64,10 +66,11 @@ app.post('/pay/esewa', async (req, res) => {
 // 2. eSewa sends the customer back with ?data=<base64>.
 app.get('/esewa/callback', async (req, res) => {
   const claim = await esewa.parseCallback({ data: String(req.query.data) }); // checks the signature
-  const order = await db.orders.find(claim.orderId!);
+  const attempt = await db.attempts.find(claim.orderId!); // the attempt id you sent
+  const order = await db.orders.find(attempt.orderId);
 
   // 3. Ask eSewa, using the amount from YOUR records.
-  const result = await esewa.verify({ orderId: order.id, amount: order.amount });
+  const result = await esewa.verify({ orderId: attempt.id, amount: order.amount });
   if (result.status === 'COMPLETED') {
     await db.orders.markPaid(order.id, result.transactionId);
     return res.send('Thank you, payment received.');
@@ -76,12 +79,24 @@ app.get('/esewa/callback', async (req, res) => {
 });
 
 // eSewa sends the customer to failureUrl when they cancel; check the real status there too.
-app.get('/esewa/failure/:orderId', async (req, res) => {
-  const order = await db.orders.find(req.params.orderId);
-  const result = await esewa.verify({ orderId: order.id, amount: order.amount });
+app.get('/esewa/failure/:attemptId', async (req, res) => {
+  const attempt = await db.attempts.find(req.params.attemptId);
+  const order = await db.orders.find(attempt.orderId);
+  const result = await esewa.verify({ orderId: attempt.id, amount: order.amount });
   res.send(`Payment not completed (${result.status}).`);
 });
 ```
+
+## Paying again
+
+eSewa refuses a `transaction_uuid` it has seen before (HTTP 400 `Duplicate transaction UUID.`), even
+when the first attempt was abandoned or used another amount. So a "Pay again" button needs:
+
+1. **A new id for every attempt:** `paymentAttemptId(order.id)` returns the order id plus 8 random
+   characters. Store each attempt against its order.
+2. **A check of earlier attempts first.** An abandoned attempt stays `PENDING`, and the customer can still
+   finish it. `verify()` each earlier attempt; if one is `COMPLETED`, the order is already paid.
+3. **A refund if two attempts both complete** (an old page and a new one were both paid).
 
 A complete working app is in the repo's
 [`examples/express-demo`](https://github.com/anishbhattarai-asm/nepal-pay/tree/main/examples/express-demo).
@@ -92,9 +107,12 @@ A complete working app is in the repo's
    was not altered, not that money moved.
 2. **Pass the amount from your database to `verify()`.** eSewa reports a wrong amount as `NOT_FOUND`,
    so a tampered amount shows up as `FAILED`.
-3. **Keep the secret key on the server.** `createEsewa()` refuses to start in a browser.
-4. **Set `environment` explicitly.** There is no default.
-5. **Make fulfilment idempotent.** Customers refresh the callback page.
+3. **Use a new `paymentAttemptId()` for every attempt** and check earlier attempts before charging again.
+4. **Keep the secret key on the server.** `createEsewa()` refuses to start in a browser page or worker.
+   That check catches mistakes; it cannot protect a key that already reached a browser.
+5. **Set `environment` explicitly.** There is no default. In production, `returnUrl` and `failureUrl`
+   must be `https`.
+6. **Make fulfilment idempotent.** Customers refresh the callback page.
 
 ## API
 
@@ -116,7 +134,9 @@ A complete working app is in the repo's
 | `parseCallback()` | `{ data }` (the `data` query param) | `{ reference, orderId, transactionId?, claimedStatus, amount, signatureValid: true, raw }` |
 | `verify()` | `{ orderId, amount }` | `{ status, amount, orderId, transactionId?, raw }` |
 
-Amounts are **rupees** with up to 2 decimals. `failureUrl` defaults to `returnUrl`.
+`orderId` is the id of **this attempt** and becomes eSewa's `transaction_uuid`: use
+`paymentAttemptId(order.id)`. Amounts are **rupees** with up to 2 decimals. `failureUrl` defaults to
+`returnUrl`.
 
 ### Statuses
 
@@ -135,12 +155,12 @@ Every failure is a `PaymentError`; check `err.code` with `isPaymentError(err)`:
 | Code | When |
 |-|-|
 | `INVALID_CONFIG` | Missing or unknown environment, empty product code or secret. |
-| `INVALID_INPUT` | Bad amount, unsafe order id, relative URL, unreadable callback. |
-| `SIGNATURE_MISMATCH` | The callback was not signed with your key, or its signature leaves status, amount, order or product unsigned. Do not trust it. |
+| `INVALID_INPUT` | Bad or too large amount, unsafe order id, relative URL, `http` URL in production, unreadable callback, callback data over 4 KB. |
+| `SIGNATURE_MISMATCH` | The callback was not signed with your key, its signature leaves status, amount, order or product unsigned, or it is for another product code. Do not trust it. |
 | `AMOUNT_MISMATCH` | eSewa reports a completed payment for a different amount. |
-| `GATEWAY_ERROR` | eSewa returned an HTTP error or a response we do not understand. |
+| `GATEWAY_ERROR` | eSewa returned an HTTP error, a status reply for another transaction or product code, a reply over 1 MB, or a response we do not understand. |
 | `NETWORK_ERROR`, `TIMEOUT` | The request did not complete. |
-| `BROWSER_ENVIRONMENT` | `createEsewa()` was called in a browser. |
+| `BROWSER_ENVIRONMENT` | `createEsewa()` was called in a browser page or worker. |
 
 ## Testing in the sandbox
 
@@ -159,9 +179,15 @@ Checked against the live sandbox and covered by tests:
 * A wrong amount in the status check comes back as `NOT_FOUND`, and an order that was started but not
   paid reports `PENDING`.
 * A bad form signature is answered with HTTP 400 `ES104 Invalid payload signature.`
+* A reused `transaction_uuid` is answered with HTTP 400 `Duplicate transaction UUID.`, even after an
+  abandoned attempt, which stays `PENDING`. Hence `paymentAttemptId()` and [Paying again](#paying-again).
 
 ## Changelog
 
+* **0.2.0**: Hardening. New `paymentAttemptId()` for paying again. Callback URLs must be `https` in
+  production (**breaking** if you used `http` there). Callbacks and status replies must match your
+  product code and transaction id. Callback data over 4 KB and gateway replies over 1 MB are refused.
+  Browser workers are refused like browser pages. Amounts must fit in a safe integer of paisa.
 * **0.1.2**: Documentation only.
 * **0.1.1**: Security fix. `parseCallback()` now rejects callbacks whose signature does not cover
   status, amount, order and product. Upgrade from 0.1.0.

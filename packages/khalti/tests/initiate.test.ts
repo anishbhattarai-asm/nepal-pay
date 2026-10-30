@@ -117,6 +117,7 @@ describe('khalti.initiate', () => {
   it.each([
     ['no payment_url', { pidx: 'abc' }],
     ['no pidx', { payment_url: 'https://test-pay.khalti.com/?pidx=abc' }],
+    ['an empty pidx', { pidx: '', payment_url: 'https://test-pay.khalti.com/?pidx=' }],
     ['an empty body', null],
   ])('throws GATEWAY_ERROR for a 200 response with %s', async (_label, body) => {
     const { khalti } = setup(jsonResponse(body));
@@ -124,6 +125,34 @@ describe('khalti.initiate', () => {
       code: 'GATEWAY_ERROR',
       message: 'khalti: initiate response has no pidx or payment_url',
     });
+  });
+
+  it.each([
+    ['plain http', 'http://test-pay.khalti.com/?pidx=abc'],
+    ['a script URL', 'javascript:alert(1)'],
+    ['a relative path', '/pay?pidx=abc'],
+  ])('refuses to redirect the customer to a payment_url that is %s', async (_label, payment_url) => {
+    const { khalti } = setup(jsonResponse({ pidx: 'abc', payment_url }));
+    await expect(khalti.initiate(base)).rejects.toMatchObject({
+      code: 'GATEWAY_ERROR',
+      message: 'khalti: payment_url is not an https URL',
+    });
+  });
+
+  it('requires an https returnUrl in production', async () => {
+    const { fetch, calls } = mockFetch();
+    const khalti = createKhalti({ ...SANDBOX, environment: 'production', fetch });
+    await expect(khalti.initiate({ ...base, returnUrl: 'http://shop.example/khalti/return' })).rejects.toMatchObject({
+      code: 'INVALID_INPUT',
+      message: 'khalti: "returnUrl" must be an absolute https URL in production',
+    });
+    expect(calls).toHaveLength(0);
+  });
+
+  it('allows an http returnUrl in the sandbox (local development)', async () => {
+    const { khalti, calls } = setup(jsonResponse(success));
+    await khalti.initiate({ ...base, returnUrl: 'http://localhost:3000/khalti/callback' });
+    expect(calls[0]!.body).toMatchObject({ return_url: 'http://localhost:3000/khalti/callback' });
   });
 
   it('passes through network failures', async () => {

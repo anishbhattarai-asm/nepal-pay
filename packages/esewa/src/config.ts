@@ -20,6 +20,7 @@ const URLS = {
 } as const;
 
 export interface ResolvedEsewaConfig {
+  production: boolean;
   productCode: string;
   secretKey: string;
   fetch?: FetchLike;
@@ -37,6 +38,7 @@ export function resolveConfig(config: EsewaConfig): ResolvedEsewaConfig {
   assertNonEmpty(config.secretKey, 'secretKey', 'esewa');
 
   return {
+    production: config.environment === 'production',
     productCode: config.productCode,
     secretKey: config.secretKey,
     fetch: config.fetch,

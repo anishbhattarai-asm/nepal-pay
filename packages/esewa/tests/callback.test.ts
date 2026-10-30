@@ -89,6 +89,21 @@ describe('esewa.parseCallback', () => {
     });
   });
 
+  it('rejects a validly signed callback for another product code', async () => {
+    const data = esewaCallbackData({ ...completeFields, product_code: { raw: 'OTHERSHOP' } });
+    await expect(esewa.parseCallback({ data })).rejects.toMatchObject({
+      code: 'SIGNATURE_MISMATCH',
+      message: 'esewa: callback is for a different product code',
+    });
+  });
+
+  it('rejects callback data larger than any real eSewa callback', async () => {
+    await expect(esewa.parseCallback({ data: 'A'.repeat(5000) })).rejects.toMatchObject({
+      code: 'INVALID_INPUT',
+      message: 'esewa: callback "data" is too large',
+    });
+  });
+
   it('rejects a callback signed with another secret', async () => {
     const data = esewaCallbackData(completeFields, 'someone-elses-secret');
     await expect(esewa.parseCallback({ data })).rejects.toMatchObject({ code: 'SIGNATURE_MISMATCH' });

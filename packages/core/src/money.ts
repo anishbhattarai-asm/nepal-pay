@@ -9,6 +9,9 @@ export function assertAmount(amount: number, gateway?: string): void {
   if (Math.abs(paisa - Math.round(paisa)) > 1e-6) {
     throw new PaymentError('INVALID_INPUT', `${prefix}amount can have at most 2 decimal places`, { gateway });
   }
+  if (!Number.isSafeInteger(Math.round(paisa))) {
+    throw new PaymentError('INVALID_INPUT', `${prefix}amount is too large`, { gateway });
+  }
 }
 
 export const toPaisa = (rupees: number): number => Math.round(rupees * 100);

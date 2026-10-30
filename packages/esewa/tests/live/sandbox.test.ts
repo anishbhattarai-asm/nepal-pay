@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { InitiateResult } from '@nepalpay/core';
-import { createEsewa } from '../../src';
+import { createEsewa, paymentAttemptId } from '../../src';
 import { UAT } from '../helpers';
 
 // Talks to the real eSewa sandbox. Run with: npm run test:live
@@ -16,6 +16,29 @@ function postForm(result: InitiateResult, override: Record<string, string> = {})
     body: new URLSearchParams({ ...result.fields, ...override }),
   });
 }
+
+describe('paying again (live)', { timeout: 30_000 }, () => {
+  const order = `retry-${Date.now()}`;
+  const first = paymentAttemptId(order);
+
+  it('eSewa rejects a reused transaction_uuid, even after an abandoned attempt', async () => {
+    const result = await esewa.initiate({ amount: 100, orderId: first, returnUrl: 'https://example.com/ok' });
+    expect((await postForm(result)).status).toBe(302);
+
+    const again = await postForm(result);
+    expect(again.status).toBe(400);
+    expect(await again.json()).toMatchObject({ error_message: 'Duplicate transaction UUID.' });
+  });
+
+  it('accepts the retry under a fresh paymentAttemptId', async () => {
+    const retry = await esewa.initiate({ amount: 100, orderId: paymentAttemptId(order), returnUrl: 'https://example.com/ok' });
+    expect((await postForm(retry)).status).toBe(302);
+  });
+
+  it('keeps the abandoned attempt PENDING, so it must be checked before charging again', async () => {
+    await expect(esewa.verify({ orderId: first, amount: 100 })).resolves.toMatchObject({ status: 'PENDING' });
+  });
+});
 
 describe('eSewa sandbox (live)', { timeout: 30_000 }, () => {
   it('accepts our signed form and redirects to the payment page', async () => {

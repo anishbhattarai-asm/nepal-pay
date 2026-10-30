@@ -10,7 +10,11 @@ export interface RequestOptions {
   body?: unknown;
   fetch?: FetchLike;
   timeoutMs?: number;
+  /** Largest response body to read. Default 1 MB; gateway replies are a few hundred bytes. */
+  maxResponseBytes?: number;
 }
+
+const DEFAULT_MAX_RESPONSE_BYTES = 1_000_000;
 
 export async function requestJson<T = unknown>(opts: RequestOptions): Promise<T> {
   const doFetch = opts.fetch ?? globalThis.fetch;
@@ -37,7 +41,7 @@ export async function requestJson<T = unknown>(opts: RequestOptions): Promise<T>
     );
   }
 
-  const text = await res.text();
+  const text = await readText(res, opts.maxResponseBytes ?? DEFAULT_MAX_RESPONSE_BYTES, opts.gateway);
   let data: unknown = text;
   try {
     data = text ? JSON.parse(text) : null;
@@ -54,6 +58,39 @@ export async function requestJson<T = unknown>(opts: RequestOptions): Promise<T>
     );
   }
   return data as T;
+}
+
+/** Reads the body as text, stopping once it passes `limit` bytes. */
+async function readText(res: Response, limit: number, gateway: string): Promise<string> {
+  const tooLarge = () =>
+    new PaymentError('GATEWAY_ERROR', `${gateway} response is larger than ${limit} bytes`, {
+      gateway,
+      details: { status: res.status },
+    });
+  const declared = Number(res.headers.get('content-length'));
+  if (Number.isFinite(declared) && declared > limit) throw tooLarge();
+  if (!res.body) return '';
+
+  const reader = res.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let size = 0;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    size += value.byteLength;
+    if (size > limit) {
+      await reader.cancel();
+      throw tooLarge();
+    }
+    chunks.push(value);
+  }
+  const bytes = new Uint8Array(size);
+  let offset = 0;
+  for (const chunk of chunks) {
+    bytes.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  return new TextDecoder().decode(bytes);
 }
 
 /** Pulls a readable reason out of common gateway error bodies. */

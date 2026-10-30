@@ -68,8 +68,9 @@ describe('khalti.parseCallback', () => {
     });
   });
 
-  it('leaves a non-numeric amount undefined', async () => {
+  it('leaves a non-numeric or fractional paisa amount undefined', async () => {
     await expect(khalti.parseCallback({ pidx: 'p', amount: 'abc' })).resolves.toMatchObject({ amount: undefined });
+    await expect(khalti.parseCallback({ pidx: 'p', amount: '1000.5' })).resolves.toMatchObject({ amount: undefined });
   });
 
   it('never calls the network', async () => {

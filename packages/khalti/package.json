@@ -1,6 +1,6 @@
 {
   "name": "@nepalpay/khalti",
-  "version": "0.1.2",
+  "version": "0.2.0",
   "description": "Unofficial zero-dependency Khalti KPG-2 SDK for Node.js and edge runtimes",
   "keywords": [
     "khalti",
@@ -43,7 +43,7 @@
     "node": ">=22"
   },
   "dependencies": {
-    "@nepalpay/core": "^0.1.0"
+    "@nepalpay/core": "^0.2.0"
   },
   "scripts": {
     "build": "tsup",

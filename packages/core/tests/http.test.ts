@@ -117,6 +117,37 @@ describe('requestJson', () => {
     });
   });
 
+  it('refuses a response that declares more than the size limit', async () => {
+    const big = new Response('{}', { headers: { 'Content-Length': '2000000' } });
+    await expect(requestJson({ gateway: 'g', url: URL_, fetch: fakeFetch(big).fetch })).rejects.toMatchObject({
+      code: 'GATEWAY_ERROR',
+      message: 'g response is larger than 1000000 bytes',
+    });
+  });
+
+  it('stops reading a streamed response once it passes the limit', async () => {
+    let pulled = 0;
+    const stream = new ReadableStream<Uint8Array>({
+      pull(controller) {
+        pulled++;
+        controller.enqueue(new Uint8Array(400));
+        if (pulled > 50) controller.close();
+      },
+    });
+    const res = new Response(stream);
+    await expect(
+      requestJson({ gateway: 'g', url: URL_, fetch: fakeFetch(res).fetch, maxResponseBytes: 1000 }),
+    ).rejects.toMatchObject({ code: 'GATEWAY_ERROR', message: 'g response is larger than 1000 bytes' });
+    expect(pulled).toBeLessThan(10);
+  });
+
+  it('reads a body that fits the limit exactly', async () => {
+    const body = JSON.stringify({ ok: 'x'.repeat(100) });
+    await expect(
+      requestJson({ gateway: 'g', url: URL_, fetch: fakeFetch(new Response(body)).fetch, maxResponseBytes: body.length }),
+    ).resolves.toEqual({ ok: 'x'.repeat(100) });
+  });
+
   it('falls back to globalThis.fetch', async () => {
     const { fetch, calls } = fakeFetch(json({ global: true }));
     vi.stubGlobal('fetch', fetch);

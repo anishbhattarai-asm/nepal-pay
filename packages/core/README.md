@@ -19,9 +19,10 @@ from both.
 |-|-|
 | `PaymentError`, `isPaymentError()` | One error type with a `code` for every failure. `isPaymentError()` works even when two copies of the package are installed. |
 | `PaymentStatus` | `COMPLETED`, `PENDING`, `FAILED`, `REFUNDED`, `CANCELED`. |
+| `paymentAttemptId()` | A fresh id for each payment attempt on an order, for "pay again". eSewa rejects reused ids. |
 | `InitiateInput`, `InitiateResult`, `VerifyResult`, `CallbackResult` | The shapes every gateway client uses. |
 | `toPaisa()`, `fromPaisa()`, `sameAmount()`, `formatRupees()`, `parseAmount()` | Rupee and paisa conversion without floating-point surprises. |
-| `requestJson()` | `fetch` with a timeout and readable gateway errors. |
+| `requestJson()` | `fetch` with a timeout, a 1 MB response limit and readable gateway errors. |
 
 ## License
 

@@ -4,11 +4,12 @@
   "type": "module",
   "scripts": {
     "start": "node index.js",
+    "test": "node --test demo.test.mjs",
     "test:live": "node --test smoke.test.mjs"
   },
   "dependencies": {
     "express": "^5.1.0",
-    "@nepalpay/esewa": "^0.1.0",
-    "@nepalpay/khalti": "^0.1.0"
+    "@nepalpay/esewa": "^0.2.0",
+    "@nepalpay/khalti": "^0.2.0"
   }
 }

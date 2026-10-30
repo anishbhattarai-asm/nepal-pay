@@ -27,6 +27,13 @@ describe('money', () => {
     expect(() => assertAmount(0.01)).not.toThrow();
   });
 
+  it('rejects amounts whose paisa value is not a safe integer', () => {
+    expect(() => assertAmount(1e12)).not.toThrow();
+    expect(() => assertAmount(1e14, 'khalti')).toThrow(
+      expect.objectContaining({ code: 'INVALID_INPUT', message: 'khalti: amount is too large' }),
+    );
+  });
+
   it('reports bad amounts as INVALID_INPUT with the gateway', () => {
     expect(() => assertAmount(-1, 'esewa')).toThrow(
       expect.objectContaining({

@@ -4,3 +4,4 @@ export * from './errors';
 export * from './http';
 export * from './money';
 export * from './guards';
+export * from './attempt';

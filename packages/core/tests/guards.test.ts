@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { assertHttpUrl, assertNonEmpty, assertServerSide, isRecord } from '../src/guards';
+import { assertHttpUrl, assertNonEmpty, assertServerSide, isHttpsUrl, isRecord } from '../src/guards';
 
 afterEach(() => {
   vi.unstubAllGlobals();
@@ -18,7 +18,14 @@ describe('assertServerSide', () => {
     );
   });
 
-  it('passes in a worker-like runtime with no document', () => {
+  it('throws BROWSER_ENVIRONMENT in a browser web or service worker (importScripts)', () => {
+    vi.stubGlobal('importScripts', () => undefined);
+    expect(() => assertServerSide('khalti')).toThrow(
+      expect.objectContaining({ code: 'BROWSER_ENVIRONMENT', gateway: 'khalti' }),
+    );
+  });
+
+  it('passes when only a window shim exists (server-side rendering)', () => {
     vi.stubGlobal('window', {});
     expect(() => assertServerSide('esewa')).not.toThrow();
   });
@@ -60,6 +67,25 @@ describe('assertHttpUrl', () => {
     expect(() => assertHttpUrl('nope', 'websiteUrl', 'khalti', 'INVALID_CONFIG')).toThrow(
       expect.objectContaining({ code: 'INVALID_CONFIG' }),
     );
+  });
+
+  it('requires https when asked (production)', () => {
+    expect(() => assertHttpUrl('https://shop.example/cb', 'returnUrl', 'g', 'INVALID_INPUT', true)).not.toThrow();
+    for (const url of ['http://shop.example/cb', 'http://localhost:3000/cb', 'nope']) {
+      expect(() => assertHttpUrl(url, 'returnUrl', 'g', 'INVALID_INPUT', true)).toThrow(
+        expect.objectContaining({ code: 'INVALID_INPUT', message: 'g: "returnUrl" must be an absolute https URL in production' }),
+      );
+    }
+  });
+});
+
+describe('isHttpsUrl', () => {
+  it('is true only for absolute https URLs', () => {
+    expect(isHttpsUrl('https://pay.khalti.com/?pidx=1')).toBe(true);
+    expect(isHttpsUrl('http://pay.khalti.com/')).toBe(false);
+    expect(isHttpsUrl('javascript:alert(1)')).toBe(false);
+    expect(isHttpsUrl('/relative')).toBe(false);
+    expect(isHttpsUrl(42)).toBe(false);
   });
 });
 

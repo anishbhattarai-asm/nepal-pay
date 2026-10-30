@@ -39,6 +39,16 @@ describe('khalti config', () => {
     );
   });
 
+  it('requires an https websiteUrl in production but allows http in the sandbox', () => {
+    expect(() => resolveConfig({ ...SANDBOX, environment: 'production', websiteUrl: 'http://shop.example' })).toThrow(
+      expect.objectContaining({
+        code: 'INVALID_CONFIG',
+        message: 'khalti: "websiteUrl" must be an absolute https URL in production',
+      }),
+    );
+    expect(resolveConfig({ ...SANDBOX, websiteUrl: 'http://localhost:3000' }).websiteUrl).toBe('http://localhost:3000');
+  });
+
   it('refuses to run in a browser', () => {
     vi.stubGlobal('window', {});
     vi.stubGlobal('document', {});

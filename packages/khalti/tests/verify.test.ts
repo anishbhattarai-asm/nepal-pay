@@ -78,8 +78,11 @@ describe('khalti.verify', () => {
   it.each([
     ['another pidx', lookupBody('Completed', { pidx: 'OTHER' }), 'different pidx'],
     ['no status', { pidx: PIDX, total_amount: 1000 }, 'unexpected lookup response'],
-    ['no total_amount', lookupBody('Completed', { total_amount: null }), 'no total_amount'],
-    ['a non-numeric total_amount', lookupBody('Completed', { total_amount: 'lots' }), 'no total_amount'],
+    ['no total_amount', lookupBody('Completed', { total_amount: null }), 'no whole-paisa total_amount'],
+    ['a non-numeric total_amount', lookupBody('Completed', { total_amount: 'lots' }), 'no whole-paisa total_amount'],
+    ['no pidx', lookupBody('Completed', { pidx: undefined }), 'different pidx'],
+    ['a fractional paisa total_amount', lookupBody('Completed', { total_amount: 1000.5 }), 'no whole-paisa total_amount'],
+    ['a negative total_amount', lookupBody('Completed', { total_amount: -1000 }), 'no whole-paisa total_amount'],
   ])('throws GATEWAY_ERROR for a lookup with %s', async (_label, body, message) => {
     const { khalti } = setup(jsonResponse(body));
     await expect(khalti.verify(input)).rejects.toMatchObject({

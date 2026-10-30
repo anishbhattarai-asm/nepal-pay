@@ -34,35 +34,36 @@ the standard `fetch` API.
 
 ```ts
 import express from 'express';
-import { createKhalti } from '@nepalpay/khalti';
+import { createKhalti, paymentAttemptId } from '@nepalpay/khalti';
 
 const khalti = createKhalti({
   environment: 'sandbox', // 'production' for real money; there is no default
   secretKey: process.env.KHALTI_SECRET_KEY!, // from test-admin.khalti.com in sandbox
-  websiteUrl: 'https://shop.example',
+  websiteUrl: 'https://shop.example', // https is required in production
 });
 
 const app = express();
 
-// 1. Start the payment: Khalti returns a URL to send the customer to.
-app.post('/pay/khalti', async (req, res) => {
-  const order = await db.orders.create({ amount: 1500 }); // rupees; Khalti's minimum is Rs 10
+// 1. Start a payment attempt: Khalti returns a URL to send the customer to.
+app.post('/orders/:id/pay/khalti', async (req, res) => {
+  const order = await db.orders.find(req.params.id); // rupees; Khalti's minimum is Rs 10
   const start = await khalti.initiate({
     amount: order.amount, // converted to paisa for you
-    orderId: order.id,
+    orderId: paymentAttemptId(order.id), // a new id for every attempt, see "Paying again"
     returnUrl: 'https://shop.example/khalti/callback',
     productName: 'Momo platter',
     customer: { name: 'Sita', phone: '9800000001' }, // optional
   });
   if (start.type !== 'redirect') throw new Error('unexpected');
-  await db.orders.update(order.id, { pidx: start.reference }); // remember the pidx
+  await db.attempts.create({ id: start.reference, orderId: order.id }); // remember the pidx
   res.redirect(303, start.url);
 });
 
 // 2. Khalti sends the customer back with ?pidx=...&status=... (not signed).
 app.get('/khalti/callback', async (req, res) => {
   const claim = await khalti.parseCallback(req.query);
-  const order = await db.orders.findByPidx(claim.reference); // by the pidx you stored, never by URL order id
+  const attempt = await db.attempts.find(claim.reference); // by the pidx you stored, never by URL order id
+  const order = await db.orders.find(attempt.orderId);
 
   // 3. Ask Khalti, using the amount from YOUR records.
   const result = await khalti.verify({ pidx: claim.reference, expectedAmount: order.amount });
@@ -77,6 +78,17 @@ app.get('/khalti/callback', async (req, res) => {
 A complete working app is in the repo's
 [`examples/express-demo`](https://github.com/anishbhattarai-asm/nepal-pay/tree/main/examples/express-demo).
 
+## Paying again
+
+Every `initiate()` creates a new pidx, and an open Khalti payment page can still be paid until it
+expires. So a "Pay again" button needs:
+
+1. **A new id for every attempt:** `paymentAttemptId(order.id)` as `orderId` (Khalti's
+   `purchase_order_id`), and the returned pidx stored against the order.
+2. **A check of earlier attempts first:** `verify()` each earlier pidx; if one is `COMPLETED`, the order is
+   already paid and must not be charged again.
+3. **A refund if two attempts both complete** (an old page and a new one were both paid).
+
 ## Rules that keep your money safe
 
 1. **Fulfil an order only when `verify()` returns `COMPLETED`.** Anyone can type the redirect URL.
@@ -85,8 +97,11 @@ A complete working app is in the repo's
    orders up by it would let one paid pidx be replayed against another order with the same amount.
 3. **Pass the amount from your database to `verify()`.** A completed payment for a different amount
    throws `AMOUNT_MISMATCH`.
-4. **Keep the secret key on the server.** `createKhalti()` refuses to start in a browser.
-5. **Set `environment` explicitly** and **make fulfilment idempotent**.
+4. **Use a new `paymentAttemptId()` for every attempt** and check earlier pidx values before charging again.
+5. **Keep the secret key on the server.** `createKhalti()` refuses to start in a browser page or worker.
+   That check catches mistakes; it cannot protect a key that already reached a browser.
+6. **Set `environment` explicitly** (in production, `websiteUrl` and `returnUrl` must be `https`) and
+   **make fulfilment idempotent**.
 
 ## API
 
@@ -108,6 +123,7 @@ A complete working app is in the repo's
 | `parseCallback()` | `req.query`, `URLSearchParams`, a query string or the full URL | `{ reference, orderId?, transactionId?, claimedStatus, amount?, signatureValid: null, raw }` |
 | `verify()` | `{ pidx, expectedAmount }` | `{ status, amount, transactionId?, raw }` |
 
+`orderId` is the id of **this attempt** (Khalti's `purchase_order_id`): use `paymentAttemptId(order.id)`.
 Amounts are **rupees** with up to 2 decimals and at least Rs 10; conversion to paisa happens inside.
 `customer` is `{ name?, email?, phone? }`.
 
@@ -127,12 +143,12 @@ Every failure is a `PaymentError`; check `err.code` with `isPaymentError(err)`:
 
 | Code | When |
 |-|-|
-| `INVALID_CONFIG` | Missing or unknown environment, empty secret, bad `websiteUrl`. |
-| `INVALID_INPUT` | Bad amount, under Rs 10, empty order id or pidx, relative URL, callback without pidx. |
+| `INVALID_CONFIG` | Missing or unknown environment, empty secret, bad `websiteUrl` (must be `https` in production). |
+| `INVALID_INPUT` | Bad or too large amount, under Rs 10, empty order id or pidx, relative URL, `http` returnUrl in production, callback without pidx. |
 | `AMOUNT_MISMATCH` | Khalti reports a completed payment for a different amount. |
-| `GATEWAY_ERROR` | Khalti returned an HTTP error (its reason is in the message) or an unexpected response. |
+| `GATEWAY_ERROR` | Khalti returned an HTTP error (its reason is in the message), a lookup for another or missing pidx, an amount that is not whole paisa, a `payment_url` that is not `https`, a reply over 1 MB, or an unexpected response. |
 | `NETWORK_ERROR`, `TIMEOUT` | The request did not complete. |
-| `BROWSER_ENVIRONMENT` | `createKhalti()` was called in a browser. |
+| `BROWSER_ENVIRONMENT` | `createKhalti()` was called in a browser page or worker. |
 
 ## Testing in the sandbox
 
@@ -152,6 +168,10 @@ Checked against docs.khalti.com and the live sandbox, and covered by tests:
 
 ## Changelog
 
+* **0.2.0**: Hardening. New `paymentAttemptId()` for paying again. `websiteUrl` and `returnUrl` must be
+  `https` in production (**breaking** if you used `http` there). `payment_url` must be `https`. Lookups
+  must return the same pidx and a whole-paisa amount. Gateway replies over 1 MB are refused. Browser
+  workers are refused like browser pages. Amounts must fit in a safe integer of paisa.
 * **0.1.2**: Documentation only.
 * **0.1.1**: Documentation: bind orders by the stored pidx.
 * **0.1.0**: First release.

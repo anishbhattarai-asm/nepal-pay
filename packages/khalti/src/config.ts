@@ -14,6 +14,7 @@ const BASE_URLS = {
 } as const;
 
 export interface ResolvedKhaltiConfig {
+  production: boolean;
   secretKey: string;
   websiteUrl: string;
   fetch?: FetchLike;
@@ -29,10 +30,12 @@ export function resolveConfig(config: KhaltiConfig): ResolvedKhaltiConfig {
   }
   assertNonEmpty(config.secretKey, 'secretKey', 'khalti');
   assertNonEmpty(config.websiteUrl, 'websiteUrl', 'khalti');
-  assertHttpUrl(config.websiteUrl, 'websiteUrl', 'khalti', 'INVALID_CONFIG');
+  const production = config.environment === 'production';
+  assertHttpUrl(config.websiteUrl, 'websiteUrl', 'khalti', 'INVALID_CONFIG', production);
 
   const base = BASE_URLS[config.environment];
   return {
+    production,
     secretKey: config.secretKey,
     websiteUrl: config.websiteUrl,
     fetch: config.fetch,

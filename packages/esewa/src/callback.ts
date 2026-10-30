@@ -1,5 +1,8 @@
 import { isRecord, PaymentError } from '@nepalpay/core';
 
+/** A real callback is about 400 characters; anything this large is not from eSewa. */
+const MAX_DATA_LENGTH = 4096;
+
 const invalid = (message: string, cause?: unknown) =>
   new PaymentError('INVALID_INPUT', `esewa: ${message}`, { gateway: 'esewa', cause });
 
@@ -10,6 +13,7 @@ const invalid = (message: string, cause?: unknown) =>
  */
 export function decodeCallbackData(data: unknown): Record<string, string> {
   if (typeof data !== 'string' || data.trim() === '') throw invalid('callback "data" is missing');
+  if (data.length > MAX_DATA_LENGTH) throw invalid('callback "data" is too large');
 
   let json: string;
   try {

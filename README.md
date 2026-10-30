@@ -22,6 +22,7 @@ signatures, paisa conversion or payment verification wrong.
 * [How a payment works](#how-a-payment-works)
 * [Quick start: eSewa](#quick-start-esewa)
 * [Quick start: Khalti](#quick-start-khalti)
+* [Paying again](#paying-again)
 * [Rules that keep your money safe](#rules-that-keep-your-money-safe)
 * [API reference](#api-reference)
 * [Testing in the sandbox](#testing-in-the-sandbox)
@@ -68,7 +69,7 @@ In the examples, `db` stands for your own database code.
 ```ts
 import express from 'express';
 import escapeHtml from 'escape-html'; // npm i escape-html
-import { createEsewa } from '@nepalpay/esewa';
+import { createEsewa, paymentAttemptId } from '@nepalpay/esewa';
 
 const esewa = createEsewa({
   environment: 'sandbox', // 'production' for real money; there is no default
@@ -78,14 +79,16 @@ const esewa = createEsewa({
 
 const app = express();
 
-// 1. Start the payment: eSewa needs a signed form POSTed from the customer's browser.
-app.post('/pay/esewa', async (req, res) => {
-  const order = await db.orders.create({ amount: 1500 }); // amount in rupees, from your own data
+// 1. Start a payment attempt: eSewa needs a signed form POSTed from the customer's browser.
+app.post('/orders/:id/pay/esewa', async (req, res) => {
+  const order = await db.orders.find(req.params.id); // amount in rupees, from your own data
+  const attemptId = paymentAttemptId(order.id); // a new id for every attempt, see "Paying again"
+  await db.attempts.create({ id: attemptId, orderId: order.id, gateway: 'esewa' });
   const form = await esewa.initiate({
     amount: order.amount,
-    orderId: order.id, // letters, digits, "-" and "_"
+    orderId: attemptId,
     returnUrl: 'https://shop.example/esewa/callback',
-    failureUrl: `https://shop.example/esewa/failure/${order.id}`,
+    failureUrl: `https://shop.example/esewa/failure/${attemptId}`,
   });
   if (form.type !== 'form') throw new Error('unexpected');
   const inputs = Object.entries(form.fields)
@@ -98,10 +101,11 @@ app.post('/pay/esewa', async (req, res) => {
 // 2. eSewa sends the customer back with ?data=<base64>.
 app.get('/esewa/callback', async (req, res) => {
   const claim = await esewa.parseCallback({ data: String(req.query.data) }); // checks the signature
-  const order = await db.orders.find(claim.orderId!);
+  const attempt = await db.attempts.find(claim.orderId!); // the attempt id you sent
+  const order = await db.orders.find(attempt.orderId);
 
   // 3. Ask eSewa, using the amount from YOUR records.
-  const result = await esewa.verify({ orderId: order.id, amount: order.amount });
+  const result = await esewa.verify({ orderId: attempt.id, amount: order.amount });
   if (result.status === 'COMPLETED') {
     await db.orders.markPaid(order.id, result.transactionId);
     return res.send('Thank you, payment received.');
@@ -114,7 +118,7 @@ app.get('/esewa/callback', async (req, res) => {
 
 ```ts
 import express from 'express';
-import { createKhalti } from '@nepalpay/khalti';
+import { createKhalti, paymentAttemptId } from '@nepalpay/khalti';
 
 const khalti = createKhalti({
   environment: 'sandbox', // 'production' for real money; there is no default
@@ -124,25 +128,26 @@ const khalti = createKhalti({
 
 const app = express();
 
-// 1. Start the payment: Khalti returns a URL to send the customer to.
-app.post('/pay/khalti', async (req, res) => {
-  const order = await db.orders.create({ amount: 1500 }); // rupees; Khalti's minimum is Rs 10
+// 1. Start a payment attempt: Khalti returns a URL to send the customer to.
+app.post('/orders/:id/pay/khalti', async (req, res) => {
+  const order = await db.orders.find(req.params.id); // rupees; Khalti's minimum is Rs 10
   const start = await khalti.initiate({
     amount: order.amount, // converted to paisa for you
-    orderId: order.id,
+    orderId: paymentAttemptId(order.id), // a new id for every attempt, see "Paying again"
     returnUrl: 'https://shop.example/khalti/callback',
     productName: 'Momo platter',
     customer: { name: 'Sita', phone: '9800000001' }, // optional
   });
   if (start.type !== 'redirect') throw new Error('unexpected');
-  await db.orders.update(order.id, { pidx: start.reference }); // remember the pidx
+  await db.attempts.create({ id: start.reference, orderId: order.id, gateway: 'khalti' }); // the pidx
   res.redirect(303, start.url);
 });
 
 // 2. Khalti sends the customer back with ?pidx=...&status=... (not signed).
 app.get('/khalti/callback', async (req, res) => {
   const claim = await khalti.parseCallback(req.query);
-  const order = await db.orders.findByPidx(claim.reference); // by the pidx you stored, never by URL order id
+  const attempt = await db.attempts.find(claim.reference); // by the pidx you stored, never by URL order id
+  const order = await db.orders.find(attempt.orderId);
 
   // 3. Ask Khalti, using the amount from YOUR records.
   const result = await khalti.verify({ pidx: claim.reference, expectedAmount: order.amount });
@@ -156,6 +161,35 @@ app.get('/khalti/callback', async (req, res) => {
 
 A complete working app with both gateways is in [`examples/express-demo`](examples/express-demo).
 
+## Paying again
+
+Customers abandon payments, run out of balance, or press back, and your site offers "Pay again". Do
+it with **one order and many payment attempts**:
+
+1. **Give every attempt its own id** with `paymentAttemptId(order.id)` (the order id plus 8 random
+   characters). eSewa refuses a `transaction_uuid` it has seen before with HTTP 400
+   `Duplicate transaction UUID.`, even when the first attempt was abandoned or used another amount.
+2. **Before starting a new attempt, `verify()` the earlier ones.** An abandoned eSewa attempt stays
+   `PENDING`, and an open Khalti payment page can still be paid until it expires. If one of them
+   completed in the meantime, the order is already paid: do not charge again.
+3. **Match each callback to its attempt** (eSewa `transaction_uuid`, Khalti `pidx`), then to its order.
+4. **If two attempts both complete, flag the order and refund one.** It can happen when a customer
+   pays an old page and a new one; the demo marks such orders `PAID_TWICE`.
+
+```ts
+async function payAgain(order) {
+  for (const attempt of await db.attempts.forOrder(order.id)) {
+    if (attempt.status === 'COMPLETED') continue;
+    const result = attempt.gateway === 'esewa'
+      ? await esewa.verify({ orderId: attempt.id, amount: order.amount })
+      : await khalti.verify({ pidx: attempt.id, expectedAmount: order.amount });
+    await db.attempts.update(attempt.id, { status: result.status });
+    if (result.status === 'COMPLETED') return markPaid(order, attempt); // paid late: no new charge
+  }
+  return startAttempt(order); // a new paymentAttemptId(order.id)
+}
+```
+
 ## Rules that keep your money safe
 
 1. **Fulfil an order only when `verify()` returns `COMPLETED`.** The redirect URL can be typed by
@@ -164,9 +198,13 @@ A complete working app with both gateways is in [`examples/express-demo`](exampl
    throws `AMOUNT_MISMATCH` instead of passing.
 3. **Khalti: find the order by the pidx you stored at `initiate()`.** Khalti's redirect is unsigned
    and its lookup API does not return your order id, so `purchase_order_id` from the URL proves nothing.
-4. **Keep secret keys on the server.** Both clients refuse to start in a browser.
-5. **Set `environment` explicitly.** There is no default, so test keys never meet real money by accident.
-6. **Make fulfilment idempotent.** Customers refresh and gateways retry; marking an order paid twice
+4. **Use a new `paymentAttemptId()` for every attempt** and check earlier attempts before charging
+   again (see [Paying again](#paying-again)).
+5. **Keep secret keys on the server.** Both clients refuse to start in a browser page or worker. That
+   check catches mistakes; it cannot protect a key that was already shipped to a browser.
+6. **Set `environment` explicitly.** There is no default, so test keys never meet real money by
+   accident. In production, every callback and website URL must be `https`.
+7. **Make fulfilment idempotent.** Customers refresh and gateways retry; marking an order paid twice
    should be harmless.
 
 ## API reference
@@ -195,7 +233,8 @@ createKhalti({ environment, secretKey, websiteUrl, fetch?, timeoutMs? })
 | `parseCallback(input)` | `{ data }` from the query string | `req.query`, `URLSearchParams`, a query string or the full URL |
 | `verify(input)` | `{ orderId, amount }` | `{ pidx, expectedAmount }` |
 
-`initiate()` takes `{ amount, orderId, returnUrl, failureUrl?, productName?, customer? }`. Amounts are
+`initiate()` takes `{ amount, orderId, returnUrl, failureUrl?, productName?, customer? }`. `orderId` is
+the id of **this attempt**: use `paymentAttemptId(order.id)`, exported by both packages. Amounts are
 always **rupees** (up to 2 decimals); conversion to paisa happens inside.
 
 `verify()` returns `{ status, amount, orderId?, transactionId?, raw }`.
@@ -233,13 +272,13 @@ try {
 
 | Code | When |
 |-|-|
-| `INVALID_CONFIG` | Missing or unknown environment, empty keys, bad `websiteUrl`. |
-| `INVALID_INPUT` | Bad amount, unsafe order id, relative URL, unreadable callback, Khalti under Rs 10. |
-| `SIGNATURE_MISMATCH` | eSewa callback not signed with your key, or signed without covering status, amount, order and product. |
+| `INVALID_CONFIG` | Missing or unknown environment, empty keys, bad `websiteUrl` (must be `https` in production). |
+| `INVALID_INPUT` | Bad or too large amount, unsafe order id, relative URL, `http` callback URL in production, unreadable or oversized callback, Khalti under Rs 10. |
+| `SIGNATURE_MISMATCH` | eSewa callback not signed with your key, signed without covering status, amount, order and product, or for another product code. |
 | `AMOUNT_MISMATCH` | The gateway reports a completed payment for a different amount. |
-| `GATEWAY_ERROR` | The gateway returned an error (its message is included) or an unexpected response. |
+| `GATEWAY_ERROR` | The gateway returned an error (its message is included), a reply about another payment, a reply over 1 MB, or a Khalti `payment_url` that is not `https`. |
 | `NETWORK_ERROR`, `TIMEOUT` | The request did not complete. |
-| `BROWSER_ENVIRONMENT` | A client was created in a browser. |
+| `BROWSER_ENVIRONMENT` | A client was created in a browser page or worker. |
 
 ## Testing in the sandbox
 
@@ -267,6 +306,9 @@ These were checked against the live sandboxes and are covered by tests:
   key. Callbacks whose signature does not cover status, amount, order and product are rejected, so the
   visible form signature cannot be replayed as a "COMPLETE" callback.
 * eSewa's status API answers `NOT_FOUND` when the amount is wrong, so a tampered amount shows as `FAILED`.
+* eSewa refuses a `transaction_uuid` it has already seen (`Duplicate transaction UUID.`), even after an
+  abandoned attempt, and the abandoned attempt stays `PENDING`. Hence `paymentAttemptId()` and
+  [Paying again](#paying-again).
 * Khalti's lookup answers `Expired` and `User canceled` with HTTP 400; these become `FAILED` and
   `CANCELED` instead of errors.
 * Khalti's status spelling varies ("Partially refunded" and "Partially Refunded"), so it is matched

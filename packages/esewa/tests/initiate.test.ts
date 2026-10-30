@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { InitiateInput, InitiateResult } from '@nepalpay/core';
 import { createEsewa } from '../src/client';
+import { paymentAttemptId } from '../src';
 import { mockFetch, nodeHmac, UAT } from './helpers';
 
 const base: InitiateInput = { amount: 100, orderId: 'ORD-1', returnUrl: 'https://shop.example/esewa/ok' };
@@ -40,6 +41,33 @@ describe('esewa.initiate', () => {
     expect(result.action).toBe('https://epay.esewa.com.np/api/epay/main/v2/form');
     expect(result.fields.product_code).toBe('MERCHANT');
     expect(result.fields.signature).toBe(nodeHmac('live-secret', 'total_amount=100,transaction_uuid=ORD-1,product_code=MERCHANT'));
+  });
+
+  it('requires https callback URLs in production', async () => {
+    const esewa = createEsewa({ environment: 'production', productCode: 'MERCHANT', secretKey: 's' });
+    await expect(esewa.initiate({ ...base, returnUrl: 'http://shop.example/ok' })).rejects.toMatchObject({
+      code: 'INVALID_INPUT',
+      message: 'esewa: "returnUrl" must be an absolute https URL in production',
+    });
+    await expect(esewa.initiate({ ...base, failureUrl: 'http://shop.example/fail' })).rejects.toMatchObject({
+      code: 'INVALID_INPUT',
+      message: 'esewa: "failureUrl" must be an absolute https URL in production',
+    });
+  });
+
+  it('allows http callback URLs in the sandbox (local development)', async () => {
+    const result = asForm(
+      await createEsewa({ environment: 'sandbox', ...UAT }).initiate({ ...base, returnUrl: 'http://localhost:3000/cb' }),
+    );
+    expect(result.fields.success_url).toBe('http://localhost:3000/cb');
+  });
+
+  it('takes a paymentAttemptId as the transaction_uuid for each retry', async () => {
+    const esewa = createEsewa({ environment: 'sandbox', ...UAT });
+    const first = asForm(await esewa.initiate({ ...base, orderId: paymentAttemptId('ORD-1') }));
+    const retry = asForm(await esewa.initiate({ ...base, orderId: paymentAttemptId('ORD-1') }));
+    expect(first.fields.transaction_uuid).toMatch(/^ORD-1-[a-z0-9]{8}$/);
+    expect(retry.fields.transaction_uuid).not.toBe(first.fields.transaction_uuid);
   });
 
   it('defaults failure_url to returnUrl', async () => {

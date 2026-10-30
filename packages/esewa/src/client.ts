@@ -62,9 +62,9 @@ export function createEsewa(config: EsewaConfig): EsewaClient {
     async initiate(input) {
       assertAmount(input.amount, GATEWAY);
       assertOrderId(input.orderId);
-      assertHttpUrl(input.returnUrl, 'returnUrl', GATEWAY);
+      assertHttpUrl(input.returnUrl, 'returnUrl', GATEWAY, 'INVALID_INPUT', cfg.production);
       const failureUrl = input.failureUrl ?? input.returnUrl;
-      assertHttpUrl(failureUrl, 'failureUrl', GATEWAY);
+      assertHttpUrl(failureUrl, 'failureUrl', GATEWAY, 'INVALID_INPUT', cfg.production);
 
       const total = formatRupees(input.amount);
       const fields: Record<string, string> = {
@@ -96,8 +96,12 @@ export function createEsewa(config: EsewaConfig): EsewaClient {
       if (!isRecord(res) || typeof res.status !== 'string') {
         throw gatewayError('unexpected status response', res);
       }
-      if (res.transaction_uuid != null && String(res.transaction_uuid) !== input.orderId) {
+      // eSewa echoes both back; a reply that does not is not about this payment.
+      if (String(res.transaction_uuid ?? '') !== input.orderId) {
         throw gatewayError('status response is for a different transaction', res);
+      }
+      if (String(res.product_code ?? '') !== cfg.productCode) {
+        throw gatewayError('status response is for a different product code', res);
       }
       const amount = parseAmount(res.total_amount);
       if (amount === undefined) throw gatewayError('status response has no total_amount', res);
@@ -140,6 +144,12 @@ export function createEsewa(config: EsewaConfig): EsewaClient {
       }
       if (!(await verifySignature(cfg.secretKey, payload, signedFields, signature))) {
         throw new PaymentError('SIGNATURE_MISMATCH', 'esewa: callback signature does not match; do not trust it', {
+          gateway: GATEWAY,
+          details: payload,
+        });
+      }
+      if (payload.product_code !== cfg.productCode) {
+        throw new PaymentError('SIGNATURE_MISMATCH', 'esewa: callback is for a different product code', {
           gateway: GATEWAY,
           details: payload,
         });

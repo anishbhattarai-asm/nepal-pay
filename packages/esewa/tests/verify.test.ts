@@ -83,6 +83,9 @@ describe('esewa.verify', () => {
 
   it.each([
     ['another transaction', statusBody('COMPLETE', { transaction_uuid: 'ORD-2' }), 'different transaction'],
+    ['no transaction_uuid', statusBody('COMPLETE', { transaction_uuid: undefined }), 'different transaction'],
+    ['another product code', statusBody('COMPLETE', { product_code: 'OTHER' }), 'different product code'],
+    ['no product_code', statusBody('COMPLETE', { product_code: undefined }), 'different product code'],
     ['no status', { transaction_uuid: 'ORD-1', total_amount: 100 }, 'unexpected status response'],
     ['a JSON array', [], 'unexpected status response'],
     ['plain text', 'OK', 'unexpected status response'],
