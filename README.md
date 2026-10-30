@@ -1,15 +1,276 @@
 # nepal-pay
 
-Unofficial, zero-dependency TypeScript SDKs for Nepali payment gateways.
-Not affiliated with eSewa or Khalti.
+[![CI](https://github.com/anishbhattarai-asm/nepal-pay/actions/workflows/ci.yml/badge.svg)](https://github.com/anishbhattarai-asm/nepal-pay/actions/workflows/ci.yml)
+[![@nepalpay/esewa](https://img.shields.io/npm/v/@nepalpay/esewa?label=%40nepalpay%2Fesewa)](https://www.npmjs.com/package/@nepalpay/esewa)
+[![@nepalpay/khalti](https://img.shields.io/npm/v/@nepalpay/khalti?label=%40nepalpay%2Fkhalti)](https://www.npmjs.com/package/@nepalpay/khalti)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
 
-| Package | Gateway |
+Accept **eSewa** and **Khalti** payments from Node.js with a few lines of TypeScript, without getting
+signatures, paisa conversion or payment verification wrong.
+
+* **Zero dependencies.** Only standard `fetch` and Web Crypto.
+* **Same API for both gateways:** `initiate()`, `parseCallback()`, `verify()`.
+* **Safe by default:** signed eSewa callbacks are checked, every payment is confirmed with the
+  gateway, and the paid amount is compared with what you expected.
+* **Tested against the real sandboxes**, not only mocks.
+
+> Unofficial. Not affiliated with eSewa or Khalti.
+
+## Contents
+
+* [Packages](#packages)
+* [How a payment works](#how-a-payment-works)
+* [Quick start: eSewa](#quick-start-esewa)
+* [Quick start: Khalti](#quick-start-khalti)
+* [Rules that keep your money safe](#rules-that-keep-your-money-safe)
+* [API reference](#api-reference)
+* [Testing in the sandbox](#testing-in-the-sandbox)
+* [Gateway quirks handled for you](#gateway-quirks-handled-for-you)
+* [Development](#development)
+
+## Packages
+
+| Package | Gateway | Install |
+|-|-|-|
+| [`@nepalpay/esewa`](https://www.npmjs.com/package/@nepalpay/esewa) | eSewa ePay v2 | `npm i @nepalpay/esewa` |
+| [`@nepalpay/khalti`](https://www.npmjs.com/package/@nepalpay/khalti) | Khalti ePayment (KPG-2) | `npm i @nepalpay/khalti` |
+| [`@nepalpay/core`](https://www.npmjs.com/package/@nepalpay/core) | Shared types and errors | installed automatically |
+
+Install only the gateway you use. Requires **Node.js 22 or newer** (use a patched release); tested
+on Node.js 22, 24 and 26. Ships ESM, CommonJS and TypeScript types.
+
+## How a payment works
+
+Both gateways follow the same three steps. The redirect back to your site is only a claim: the
+payment is real once `verify()` says so.
+
+```mermaid
+sequenceDiagram
+    participant C as Customer
+    participant S as Your server
+    participant G as eSewa / Khalti
+    C->>S: Checkout
+    S->>S: initiate()
+    S->>C: Form (eSewa) or redirect URL (Khalti)
+    C->>G: Pays
+    G->>C: Redirect to your returnUrl
+    C->>S: GET returnUrl?...
+    S->>S: parseCallback() (what the redirect claims)
+    S->>G: verify() asks the gateway directly
+    G->>S: COMPLETED / PENDING / FAILED / ...
+    S->>C: Order confirmed (only if COMPLETED)
+```
+
+## Quick start: eSewa
+
+In the examples, `db` stands for your own database code.
+
+```ts
+import express from 'express';
+import escapeHtml from 'escape-html'; // npm i escape-html
+import { createEsewa } from '@nepalpay/esewa';
+
+const esewa = createEsewa({
+  environment: 'sandbox', // 'production' for real money; there is no default
+  productCode: process.env.ESEWA_PRODUCT_CODE!, // EPAYTEST in sandbox
+  secretKey: process.env.ESEWA_SECRET_KEY!, // keep it on the server
+});
+
+const app = express();
+
+// 1. Start the payment: eSewa needs a signed form POSTed from the customer's browser.
+app.post('/pay/esewa', async (req, res) => {
+  const order = await db.orders.create({ amount: 1500 }); // amount in rupees, from your own data
+  const form = await esewa.initiate({
+    amount: order.amount,
+    orderId: order.id, // letters, digits, "-" and "_"
+    returnUrl: 'https://shop.example/esewa/callback',
+    failureUrl: `https://shop.example/esewa/failure/${order.id}`,
+  });
+  if (form.type !== 'form') throw new Error('unexpected');
+  const inputs = Object.entries(form.fields)
+    .map(([name, value]) => `<input type="hidden" name="${escapeHtml(name)}" value="${escapeHtml(value)}">`)
+    .join('');
+  res.send(`<form id="pay" method="post" action="${escapeHtml(form.action)}">${inputs}</form>
+            <script>document.getElementById('pay').submit()</script>`);
+});
+
+// 2. eSewa sends the customer back with ?data=<base64>.
+app.get('/esewa/callback', async (req, res) => {
+  const claim = await esewa.parseCallback({ data: String(req.query.data) }); // checks the signature
+  const order = await db.orders.find(claim.orderId!);
+
+  // 3. Ask eSewa, using the amount from YOUR records.
+  const result = await esewa.verify({ orderId: order.id, amount: order.amount });
+  if (result.status === 'COMPLETED') {
+    await db.orders.markPaid(order.id, result.transactionId);
+    return res.send('Thank you, payment received.');
+  }
+  res.send(`Payment not completed (${result.status}).`);
+});
+```
+
+## Quick start: Khalti
+
+```ts
+import express from 'express';
+import { createKhalti } from '@nepalpay/khalti';
+
+const khalti = createKhalti({
+  environment: 'sandbox', // 'production' for real money; there is no default
+  secretKey: process.env.KHALTI_SECRET_KEY!, // from test-admin.khalti.com in sandbox
+  websiteUrl: 'https://shop.example',
+});
+
+const app = express();
+
+// 1. Start the payment: Khalti returns a URL to send the customer to.
+app.post('/pay/khalti', async (req, res) => {
+  const order = await db.orders.create({ amount: 1500 }); // rupees; Khalti's minimum is Rs 10
+  const start = await khalti.initiate({
+    amount: order.amount, // converted to paisa for you
+    orderId: order.id,
+    returnUrl: 'https://shop.example/khalti/callback',
+    productName: 'Momo platter',
+    customer: { name: 'Sita', phone: '9800000001' }, // optional
+  });
+  if (start.type !== 'redirect') throw new Error('unexpected');
+  await db.orders.update(order.id, { pidx: start.reference }); // remember the pidx
+  res.redirect(303, start.url);
+});
+
+// 2. Khalti sends the customer back with ?pidx=...&status=... (not signed).
+app.get('/khalti/callback', async (req, res) => {
+  const claim = await khalti.parseCallback(req.query);
+  const order = await db.orders.findByPidx(claim.reference); // by the pidx you stored, never by URL order id
+
+  // 3. Ask Khalti, using the amount from YOUR records.
+  const result = await khalti.verify({ pidx: claim.reference, expectedAmount: order.amount });
+  if (result.status === 'COMPLETED') {
+    await db.orders.markPaid(order.id, result.transactionId);
+    return res.send('Thank you, payment received.');
+  }
+  res.send(`Payment not completed (${result.status}).`);
+});
+```
+
+A complete working app with both gateways is in [`examples/express-demo`](examples/express-demo).
+
+## Rules that keep your money safe
+
+1. **Fulfil an order only when `verify()` returns `COMPLETED`.** The redirect URL can be typed by
+   anyone; `parseCallback()` only tells you what it claims.
+2. **Pass the amount from your database to `verify()`.** A completed payment for a different amount
+   throws `AMOUNT_MISMATCH` instead of passing.
+3. **Khalti: find the order by the pidx you stored at `initiate()`.** Khalti's redirect is unsigned
+   and its lookup API does not return your order id, so `purchase_order_id` from the URL proves nothing.
+4. **Keep secret keys on the server.** Both clients refuse to start in a browser.
+5. **Set `environment` explicitly.** There is no default, so test keys never meet real money by accident.
+6. **Make fulfilment idempotent.** Customers refresh and gateways retry; marking an order paid twice
+   should be harmless.
+
+## API reference
+
+### Creating a client
+
+```ts
+createEsewa({ environment, productCode, secretKey, fetch?, timeoutMs? })
+createKhalti({ environment, secretKey, websiteUrl, fetch?, timeoutMs? })
+```
+
+| Option | Meaning |
 |-|-|
-| `@nepalpay/esewa` | eSewa ePay v2 |
-| `@nepalpay/khalti` | Khalti KPG-2 |
-| `@nepalpay/core` | Shared types, errors, HTTP (installed automatically) |
+| `environment` | `'sandbox'` or `'production'`. Required. |
+| `productCode` | eSewa merchant code (`EPAYTEST` in sandbox). |
+| `secretKey` | eSewa HMAC secret, or Khalti secret key. |
+| `websiteUrl` | Your site's URL, sent to Khalti. |
+| `fetch` | Custom fetch for proxies, logging or tests. Defaults to the global `fetch`. |
+| `timeoutMs` | Request timeout. Default `15000`. |
 
-See ARCHITECTURE.md for design decisions and each package's README for usage.
+### Methods
+
+| Method | eSewa | Khalti |
+|-|-|-|
+| `initiate(input)` | `{ type: 'form', action, fields, reference }` | `{ type: 'redirect', url, reference, raw }` |
+| `parseCallback(input)` | `{ data }` from the query string | `req.query`, `URLSearchParams`, a query string or the full URL |
+| `verify(input)` | `{ orderId, amount }` | `{ pidx, expectedAmount }` |
+
+`initiate()` takes `{ amount, orderId, returnUrl, failureUrl?, productName?, customer? }`. Amounts are
+always **rupees** (up to 2 decimals); conversion to paisa happens inside.
+
+`verify()` returns `{ status, amount, orderId?, transactionId?, raw }`.
+`parseCallback()` returns `{ reference, orderId?, transactionId?, claimedStatus, amount?, signatureValid, raw }`,
+where `signatureValid` is `true` for eSewa (forged callbacks throw) and `null` for Khalti (not signed).
+
+### Statuses
+
+| Status | eSewa | Khalti |
+|-|-|-|
+| `COMPLETED` | COMPLETE | Completed |
+| `PENDING` | PENDING, AMBIGUOUS | Pending, Initiated |
+| `REFUNDED` | FULL_REFUND, PARTIAL_REFUND | Refunded, Partially Refunded |
+| `CANCELED` | CANCELED | User canceled |
+| `FAILED` | NOT_FOUND, anything else | Expired, anything else |
+
+The gateway's original response is always in `raw`.
+
+### Errors
+
+Every failure is a `PaymentError`. Check `err.code` (works even with two copies of the package):
+
+```ts
+import { isPaymentError } from '@nepalpay/esewa';
+
+try {
+  await esewa.verify({ orderId, amount });
+} catch (err) {
+  if (isPaymentError(err) && err.code === 'AMOUNT_MISMATCH') {
+    // flag the order for review
+  }
+  throw err;
+}
+```
+
+| Code | When |
+|-|-|
+| `INVALID_CONFIG` | Missing or unknown environment, empty keys, bad `websiteUrl`. |
+| `INVALID_INPUT` | Bad amount, unsafe order id, relative URL, unreadable callback, Khalti under Rs 10. |
+| `SIGNATURE_MISMATCH` | eSewa callback not signed with your key, or signed without covering status, amount, order and product. |
+| `AMOUNT_MISMATCH` | The gateway reports a completed payment for a different amount. |
+| `GATEWAY_ERROR` | The gateway returned an error (its message is included) or an unexpected response. |
+| `NETWORK_ERROR`, `TIMEOUT` | The request did not complete. |
+| `BROWSER_ENVIRONMENT` | A client was created in a browser. |
+
+## Testing in the sandbox
+
+| | eSewa | Khalti |
+|-|-|-|
+| Merchant keys | product code `EPAYTEST`, secret `8gBm/:&EnhH.1/q` (public test values) | sign up at [test-admin.khalti.com](https://test-admin.khalti.com/#/join/merchant) and use its `live_secret_key` |
+| Test customer login | eSewa ID `9806800001`, password `Nepal@123`, token `123456` | Khalti ID `9800000000` to `9800000005`, MPIN `1111`, OTP `987654` |
+
+Run the demo app against the sandboxes:
+
+```sh
+git clone https://github.com/anishbhattarai-asm/nepal-pay.git
+cd nepal-pay
+npm ci
+npm run demo   # http://localhost:3000, set KHALTI_SECRET_KEY to enable Khalti
+```
+
+## Gateway quirks handled for you
+
+These were checked against the live sandboxes and are covered by tests:
+
+* eSewa signs `total_amount=1000.0` but sends `1000.0` as a JSON number. A plain `JSON.parse` turns it
+  into `1000` and every round-amount payment fails its signature check; this library keeps the exact text.
+* An eSewa callback lists its own signed fields, and the form your site sends is signed with the same
+  key. Callbacks whose signature does not cover status, amount, order and product are rejected, so the
+  visible form signature cannot be replayed as a "COMPLETE" callback.
+* eSewa's status API answers `NOT_FOUND` when the amount is wrong, so a tampered amount shows as `FAILED`.
+* Khalti's lookup answers `Expired` and `User canceled` with HTTP 400; these become `FAILED` and
+  `CANCELED` instead of errors.
+* Khalti's status spelling varies ("Partially refunded" and "Partially Refunded"), so it is matched
+  case-insensitively.
 
 ## Development
 
@@ -20,12 +281,11 @@ npm run test:live   # hits the real eSewa and Khalti sandboxes
 npm run demo        # Express demo on http://localhost:3000
 ```
 
-`test:live` and the demo use eSewa's public UAT credentials. Khalti has no shared test key:
-set `KHALTI_SECRET_KEY` (from test-admin.khalti.com) to include Khalti's full flow.
+`test:live` uses eSewa's public test values. Set `KHALTI_SECRET_KEY` to include Khalti's full flow.
+TypeScript is pinned to 5.9 because tsup's declaration build does not work with TypeScript 7.
+Design notes are in [ARCHITECTURE.md](ARCHITECTURE.md).
 
-TypeScript is pinned to 5.9: tsup's declaration build does not work with TypeScript 7.
-
-## Releasing
+### Releasing
 
 ```sh
 npm version patch -w @nepalpay/esewa   # bump only the packages that changed
@@ -33,3 +293,7 @@ npm run release                        # check, then publish every package whose
 ```
 
 When core gets a new minor version, update the `@nepalpay/core` range in esewa and khalti too.
+
+## License
+
+[MIT](LICENSE) © Anish Bhattarai
