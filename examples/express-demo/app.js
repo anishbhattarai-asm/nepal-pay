@@ -91,8 +91,9 @@ export function createApp({ esewa, khalti, baseUrl }) {
     if (!khalti) return res.status(503).send(khaltiOff());
     const claim = await khalti.parseCallback(req.query);
     console.log('[khalti] callback', claim.raw);
-    const order = claim.orderId ? orders.get(claim.orderId) : undefined;
-    if (!order || order.gateway !== 'khalti' || order.reference !== claim.reference) {
+    // The redirect is unsigned: find the order by the pidx stored at initiate, not by purchase_order_id.
+    const order = [...orders.values()].find((o) => o.gateway === 'khalti' && o.reference === claim.reference);
+    if (!order) {
       return res.status(404).send(page('Unknown order', '<p>No Khalti order matches this callback.</p>'));
     }
     settle(order, await khalti.verify({ pidx: claim.reference, expectedAmount: order.amount }));

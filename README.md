@@ -29,7 +29,7 @@ TypeScript is pinned to 5.9: tsup's declaration build does not work with TypeScr
 
 ```sh
 npm version patch -w @nepalpay/esewa   # bump only the packages that changed
-npm run release                        # check, then publish core, esewa and khalti
+npm run release                        # check, then publish every package whose version is new
 ```
 
 When core gets a new minor version, update the `@nepalpay/core` range in esewa and khalti too.

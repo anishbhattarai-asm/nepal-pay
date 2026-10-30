@@ -25,15 +25,21 @@ const start = await khalti.initiate({
   productName: 'Momo platter',
   customer: { name: 'Sita', phone: '9800000001' },
 });
-// start.type === 'redirect' -> res.redirect(start.url); store start.reference (the pidx)
+await db.orders.update('ORD-1001', { pidx: start.reference }); // remember which pidx belongs to this order
+// start.type === 'redirect' -> res.redirect(start.url)
 
 // 2. Return redirect: Khalti does NOT sign it, so this is only a claim.
 const claim = await khalti.parseCallback(req.query); // also takes a URL, query string or URLSearchParams
 
-// 3. Always confirm with the lookup API before fulfilling the order.
+// 3. Find the order by the pidx you stored, then confirm with the lookup API before fulfilling it.
+const order = await db.orders.findByPidx(claim.reference);
 const result = await khalti.verify({ pidx: claim.reference, expectedAmount: order.amount });
 if (result.status === 'COMPLETED') fulfil(order);
 ```
+
+Never look the order up by `purchase_order_id` from the redirect URL. Khalti's lookup API does not
+return your order id, so only the pidx you stored at initiate ties a payment to an order. Otherwise one
+paid pidx could be replayed against another order with the same amount.
 
 `verify()` returns `{ status, amount, transactionId, raw }` where `status` is one of
 `COMPLETED`, `PENDING`, `FAILED`, `REFUNDED` or `CANCELED`.

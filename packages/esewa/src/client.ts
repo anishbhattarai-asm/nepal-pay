@@ -22,6 +22,12 @@ const GATEWAY = 'esewa';
 /** transaction_uuid goes into a comma-joined signed message and a query string, so keep it to safe characters. */
 const ORDER_ID_PATTERN = /^[A-Za-z0-9_-]+$/;
 
+/**
+ * The callback names its own signed fields, so a signature over fewer fields (such as the one on the
+ * initiate form the customer can see) must not vouch for the fields parseCallback reports.
+ */
+const REQUIRED_SIGNED_FIELDS = ['status', 'total_amount', 'transaction_uuid', 'product_code'];
+
 export interface EsewaVerifyInput {
   /** The transaction_uuid you sent (your orderId). */
   orderId: string;
@@ -123,6 +129,15 @@ export function createEsewa(config: EsewaConfig): EsewaClient {
           details: payload,
         });
       }
+      const signed = new Set(signedFields.split(','));
+      const unsigned = REQUIRED_SIGNED_FIELDS.filter((field) => !signed.has(field));
+      if (unsigned.length > 0) {
+        throw new PaymentError(
+          'SIGNATURE_MISMATCH',
+          `esewa: callback signature does not cover ${unsigned.join(', ')}; do not trust it`,
+          { gateway: GATEWAY, details: payload },
+        );
+      }
       if (!(await verifySignature(cfg.secretKey, payload, signedFields, signature))) {
         throw new PaymentError('SIGNATURE_MISMATCH', 'esewa: callback signature does not match; do not trust it', {
           gateway: GATEWAY,
@@ -139,7 +154,7 @@ export function createEsewa(config: EsewaConfig): EsewaClient {
       return {
         reference: orderId,
         orderId,
-        transactionId: payload.transaction_code || undefined,
+        transactionId: signed.has('transaction_code') ? payload.transaction_code || undefined : undefined,
         claimedStatus: mapEsewaStatus(payload.status),
         amount: parseAmount(payload.total_amount),
         signatureValid: true,

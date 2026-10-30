@@ -28,6 +28,11 @@ COMPLETED | PENDING | FAILED | REFUNDED | CANCELED, with the original response k
 - eSewa's status API echoes the queried amount and answers NOT_FOUND when it is wrong.
 - Khalti's lookup answers Expired and User canceled with HTTP 400 and a normal body; verify() maps them.
 - Khalti status casing varies, so it is matched case-insensitively.
+- An eSewa callback names its own signed fields, so parseCallback() requires the signature to cover
+  status, total_amount, transaction_uuid and product_code; otherwise the visible form signature could
+  be replayed as a "COMPLETE" callback.
+- Khalti redirects are unsigned and lookup returns no order id: bind a payment to an order by the pidx
+  stored at initiate, never by purchase_order_id from the URL.
 
 ## Tests
 - Unit tests (npm test, CI) inject fetch and never touch the network.

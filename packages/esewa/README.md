@@ -26,13 +26,18 @@ const form = await esewa.initiate({
 });
 // form.type === 'form' -> POST form.fields to form.action
 
-// 2. Success redirect: eSewa appends ?data=<base64>. parseCallback checks the HMAC signature.
+// 2. Success redirect: eSewa appends ?data=<base64>. parseCallback checks the HMAC signature and that it
+//    covers status, total_amount, transaction_uuid and product_code.
 const claim = await esewa.parseCallback({ data: String(req.query.data) });
 
-// 3. Always confirm with eSewa before fulfilling the order.
-const result = await esewa.verify({ orderId: claim.orderId!, amount: order.amount });
+// 3. Always confirm with eSewa before fulfilling the order. Use the amount from your own records.
+const order = await db.orders.find(claim.orderId!);
+const result = await esewa.verify({ orderId: order.id, amount: order.amount });
 if (result.status === 'COMPLETED') fulfil(order);
 ```
+
+`parseCallback()` alone never proves payment: it only shows that eSewa's redirect was not altered.
+`verify()` asks eSewa's status API, which is the only answer to fulfil an order on.
 
 `verify()` returns `{ status, amount, orderId, transactionId, raw }` where `status` is one of
 `COMPLETED`, `PENDING`, `FAILED`, `REFUNDED` or `CANCELED`.
@@ -45,7 +50,7 @@ Every failure is a `PaymentError`; check `err.code`:
 |-|-|
 | `INVALID_CONFIG` | missing or unknown environment, empty product code or secret |
 | `INVALID_INPUT` | bad amount, unsafe orderId, relative URL, unreadable callback |
-| `SIGNATURE_MISMATCH` | the callback was not signed with your secret key; do not trust it |
+| `SIGNATURE_MISMATCH` | the callback was not signed with your secret key, or the signature leaves status, amount, order or product unsigned; do not trust it |
 | `AMOUNT_MISMATCH` | eSewa reports a completed payment for a different amount |
 | `GATEWAY_ERROR` | eSewa returned an HTTP error or a response we do not understand |
 | `NETWORK_ERROR` / `TIMEOUT` | the request did not complete |
@@ -59,3 +64,4 @@ Checked against the live sandbox on 2026-10-30:
 * An order that was started but not paid reports `PENDING`.
 * eSewa signs `total_amount=1000.0` but sends `1000.0` as a JSON number. The callback decoder keeps the raw text, otherwise every round amount would fail the signature check.
 * A bad form signature is answered with HTTP 400 `ES104 Invalid payload signature.`
+* A callback lists its own `signed_field_names`, and the initiate form the customer sees is signed with the same key. `parseCallback()` therefore rejects any signature that does not cover `status`, `total_amount`, `transaction_uuid` and `product_code` (fixed in 0.1.1).

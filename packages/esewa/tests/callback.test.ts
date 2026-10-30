@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { decodeCallbackData } from '../src/callback';
 import { createEsewa } from '../src/client';
+import { verifySignature } from '../src/signing';
 import { esewaCallbackData, mockFetch, UAT } from './helpers';
 
 const esewa = createEsewa({ environment: 'sandbox', ...UAT });
@@ -108,18 +109,100 @@ describe('esewa.parseCallback', () => {
     ['no signed_field_names', Buffer.from('{"transaction_uuid":"ORD-1","signature":"abc"}').toString('base64')],
     [
       'a signed field that is absent',
-      Buffer.from('{"signed_field_names":"transaction_uuid,total_amount","signature":"abc","transaction_uuid":"X"}').toString('base64'),
+      Buffer.from(
+        '{"signed_field_names":"status,total_amount,transaction_uuid,product_code","signature":"abc",' +
+          '"status":"COMPLETE","transaction_uuid":"X","product_code":"EPAYTEST"}',
+      ).toString('base64'),
     ],
   ])('rejects %s with INVALID_INPUT', async (_label, data) => {
     await expect(esewa.parseCallback({ data: data as string })).rejects.toMatchObject({ code: 'INVALID_INPUT' });
   });
 
-  it('rejects a validly signed callback with no transaction_uuid', async () => {
-    const { transaction_uuid: _omit, ...rest } = completeFields;
-    const data = esewaCallbackData(rest);
+  it('rejects a validly signed callback with an empty transaction_uuid', async () => {
+    const data = esewaCallbackData({ ...completeFields, transaction_uuid: { raw: '' } });
     await expect(esewa.parseCallback({ data })).rejects.toMatchObject({
       code: 'INVALID_INPUT',
       message: 'esewa: callback has no transaction_uuid',
+    });
+  });
+
+  describe('signature coverage', () => {
+    const encode = (payload: object) => Buffer.from(JSON.stringify(payload)).toString('base64');
+    // Amount as a JSON string so re-encoding below changes nothing but what each test adds.
+    const stringTotal = { ...completeFields, total_amount: { raw: '1000.0' } };
+    const values: Record<string, string> = {
+      status: 'COMPLETE',
+      total_amount: '1000.0',
+      transaction_uuid: 'ORD-1',
+      product_code: 'EPAYTEST',
+    };
+
+    async function signedForm() {
+      const form = await esewa.initiate({ amount: 100, orderId: 'ORD-77', returnUrl: 'https://shop.example/cb' });
+      if (form.type !== 'form') throw new Error('expected a form result');
+      return form.fields;
+    }
+
+    it('rejects the initiate form signature reused as a success callback', async () => {
+      const f = await signedForm();
+      const forged = {
+        total_amount: f.total_amount,
+        transaction_uuid: f.transaction_uuid,
+        product_code: f.product_code,
+        status: 'COMPLETE',
+        transaction_code: 'FAKE01',
+        signed_field_names: f.signed_field_names,
+        signature: f.signature,
+      };
+      await expect(esewa.parseCallback({ data: encode(forged) })).rejects.toMatchObject({
+        code: 'SIGNATURE_MISMATCH',
+        message: 'esewa: callback signature does not cover status; do not trust it',
+      });
+    });
+
+    it('rejects the form signature stretched over one field that swallows the rest', async () => {
+      const f = await signedForm();
+      const forged = {
+        total_amount: `${f.total_amount},transaction_uuid=${f.transaction_uuid},product_code=${f.product_code}`,
+        transaction_uuid: 'ORD-OTHER',
+        product_code: 'EPAYTEST',
+        status: 'COMPLETE',
+        signed_field_names: 'total_amount',
+        signature: f.signature!,
+      };
+      // Control: the HMAC itself matches, so only the coverage rule stops this.
+      expect(await verifySignature(UAT.secretKey, forged, 'total_amount', forged.signature)).toBe(true);
+      await expect(esewa.parseCallback({ data: encode(forged) })).rejects.toMatchObject({
+        code: 'SIGNATURE_MISMATCH',
+        message: 'esewa: callback signature does not cover status, transaction_uuid, product_code; do not trust it',
+      });
+    });
+
+    it.each(['status', 'total_amount', 'transaction_uuid', 'product_code'])(
+      'rejects a valid signature that leaves %s unsigned',
+      async (field) => {
+        const signed: Record<string, { raw: string; json?: 'number' }> = { ...stringTotal };
+        delete signed[field];
+        const payload = JSON.parse(Buffer.from(esewaCallbackData(signed), 'base64').toString('utf8'));
+        payload[field] = values[field];
+
+        await expect(esewa.parseCallback({ data: encode(payload) })).rejects.toMatchObject({
+          code: 'SIGNATURE_MISMATCH',
+          message: `esewa: callback signature does not cover ${field}; do not trust it`,
+        });
+      },
+    );
+
+    it('reports transaction_code only when it is signed', async () => {
+      const { transaction_code: _omit, ...signed } = stringTotal;
+      const payload = JSON.parse(Buffer.from(esewaCallbackData(signed), 'base64').toString('utf8'));
+      payload.transaction_code = 'FAKE01';
+
+      await expect(esewa.parseCallback({ data: encode(payload) })).resolves.toMatchObject({
+        claimedStatus: 'COMPLETED',
+        transactionId: undefined,
+        signatureValid: true,
+      });
     });
   });
 });

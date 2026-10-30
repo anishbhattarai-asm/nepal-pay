@@ -107,6 +107,22 @@ describe('express demo against the eSewa sandbox', { timeout: 60_000 }, () => {
     assert.equal(orders.get(orderId).status, 'PENDING');
   });
 
+  it('rejects the visible form signature replayed as a COMPLETE callback', async () => {
+    const forged = {
+      total_amount: form.total_amount,
+      transaction_uuid: form.transaction_uuid,
+      product_code: form.product_code,
+      status: 'COMPLETE',
+      signed_field_names: form.signed_field_names,
+      signature: form.signature,
+    };
+    const data = Buffer.from(JSON.stringify(forged)).toString('base64');
+    const res = await fetch(`${base}/esewa/callback?data=${encodeURIComponent(data)}`);
+    assert.equal(res.status, 400);
+    assert.match(await res.text(), /SIGNATURE_MISMATCH/);
+    assert.equal(orders.get(orderId).status, 'PENDING');
+  });
+
   it('rejects a callback with garbage data', async () => {
     const res = await fetch(`${base}/esewa/callback?data=not-base64!!`);
     assert.equal(res.status, 400);
