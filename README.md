@@ -95,7 +95,8 @@ if (result.status === 'COMPLETED') await db.orders.markPaid(order.id, result.tra
 ```
 
 A complete Express app with both gateways, retries included, is in
-[`examples/express-demo`](examples/express-demo).
+[`examples/express-demo`](examples/express-demo). It keeps orders in memory and is a local sandbox
+demo, not a deployable app.
 
 ## Retries
 
@@ -103,8 +104,9 @@ An order can need several payment attempts (abandoned page, insufficient balance
 
 - `paymentAttemptId(order.id)` returns a new id per attempt. eSewa rejects any reused
   `transaction_uuid` (`Duplicate transaction UUID.`); Khalti issues a new pidx per attempt.
-- An abandoned eSewa attempt stays `PENDING`, and a Khalti payment page stays payable for 30 minutes,
-  so an earlier attempt can still complete after a new one starts.
+- An abandoned eSewa attempt stays `PENDING`, and a Khalti payment page stays payable for 30 minutes
+  in the sandbox (60 in production by default), so an earlier attempt can still complete after a new
+  one starts.
 - The demo therefore re-verifies earlier attempts before starting a new one, matches each callback to
   its attempt, and marks an order `PAID_TWICE` when two attempts complete, for a refund.
 - Two requests for one order can arrive together (double click, two tabs). The demo runs one payment
@@ -114,7 +116,7 @@ An order can need several payment attempts (abandoned page, insufficient balance
 ## Gateway outages
 
 Neither gateway publishes a health endpoint, so an outage shows up as an error from `verify()` or
-Khalti's `initiate()`. `error.retryable` tells whether repeating the call can help:
+Khalti's `initiate()`. `error.retryable` marks failures that may clear on their own:
 
 | Error | `retryable` | Cause |
 |-|-|-|
@@ -123,11 +125,18 @@ Khalti's `initiate()`. `error.retryable` tells whether repeating the call can he
 | `GATEWAY_ERROR`, HTTP 429 or 5xx | true | Rate limit or maintenance; `details.status` holds the HTTP status |
 | Any other error | false | Input, configuration, signature or amount problem; a repeat gives the same result |
 
-A failed `verify()` says nothing about the payment itself: the customer may already have paid. The
-attempt keeps its last known status and is verified again later, on the next callback, a status
-check or a scheduled job; `verify()` only reads, so repeating it is safe. A failed `initiate()` leaves
-no attempt behind. The `fetch` option accepts a wrapper for retries, circuit breaking or logging. The
-demo answers 503 for retryable errors and leaves the order unchanged.
+`retryable` means the failure is transient, not that the request had no effect:
+
+| Call | After a retryable error |
+|-|-|
+| `verify()` | Read only, so repeating it is safe. The payment is unknown, not failed: the customer may already have paid. The attempt keeps its last status and is verified again on the next callback, status check or scheduled job. |
+| Khalti `initiate()` | Khalti may already have created the payment. Its pidx and payment URL were in the lost reply, so the customer never reaches that page and it expires unpaid. Khalti offers no idempotency key and no lookup by `purchase_order_id`, so that pidx cannot be recovered; a new attempt with a new `paymentAttemptId()` does not risk a double charge. |
+| eSewa `initiate()` | Signs the form locally and sends no request, so it cannot fail this way. |
+
+The library never retries by itself. The `fetch` option accepts a wrapper for retries, circuit
+breaking or logging; a retrying wrapper repeats only the status and lookup requests, never Khalti's
+`/epayment/initiate/`. The demo answers 503 for retryable errors, leaves the order neither paid nor
+failed, and logs the attempt id of a Khalti start that got no reply.
 
 ## Security model
 
@@ -159,6 +168,7 @@ Vulnerability reports: see [SECURITY.md](SECURITY.md).
 | Outages | Typed errors with `retryable` | Keeps attempts on errors and verifies them again later |
 | Reconciliation | Application only | Re-verifies unfinished attempts on a schedule, catching customers who never return to the site |
 | Refunds | Application only | Refunds `PAID_TWICE` orders and returns through the gateway's merchant portal |
+| Abuse | Per-order attempt cap in the demo only | Rate limits payment starts per IP or account, keeps attempt limits in the database, and watches for unusual numbers of starts |
 
 ## API
 
@@ -197,7 +207,7 @@ Results include `raw`, the gateway's reply as received (Khalti amounts in paisa)
 
 | Suite | Command | Covers |
 |-|-|-|
-| Unit (275 tests) | `npm run check` | Signing and signature coverage, every status mapping, amount and paisa handling, URL and size limits, error mapping including stalled and broken replies, and in the demo: retries, double payment, simultaneous checkout requests and outages |
+| Unit (278 tests) | `npm run check` | Signing and signature coverage, every status mapping, amount and paisa handling, URL and size limits, error mapping including stalled and broken replies, and in the demo: retries, double payment, simultaneous checkout requests, outages and a Khalti start whose reply was lost |
 | Live sandbox | `npm run test:live` | Signed form accepted by eSewa, tampered signature rejected (`ES104`), reused id rejected, status lookups, Khalti initiate and lookup (with `KHALTI_SECRET_KEY`) |
 | CI | GitHub Actions | Build, typecheck and unit tests on Node.js 22, 24 and 26 for every push |
 

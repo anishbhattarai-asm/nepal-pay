@@ -27,7 +27,8 @@
     with a whole-paisa amount.
 11. Every transport failure is a PaymentError, including a reply body that stalls or breaks after the
     headers. retryable is true for NETWORK_ERROR, TIMEOUT and HTTP 429 or 5xx, so callers can tell an
-    outage from a bug. A failed verify() never means a failed payment.
+    outage from a bug. It means transient, not "had no effect": a failed verify() never means a failed
+    payment, and a failed Khalti initiate() may still have created one. The library never retries.
 
 ## Status mapping
 COMPLETED | PENDING | FAILED | REFUNDED | CANCELED, with the original response kept in raw.
@@ -43,6 +44,10 @@ COMPLETED | PENDING | FAILED | REFUNDED | CANCELED, with the original response k
   be replayed as a "COMPLETE" callback.
 - Khalti redirects are unsigned and lookup returns no order id: bind a payment to an order by the pidx
   stored at initiate, never by purchase_order_id from the URL.
+- Khalti has no idempotency key and no lookup by purchase_order_id; lookup takes only a pidx, and the
+  sandbox accepts a reused purchase_order_id with a new pidx. A pidx whose initiate reply was lost is
+  unreachable for the customer and expires unpaid (1800 s in the sandbox, 60 minutes by default in
+  production per Khalti's docs, checked 2026-10-31).
 - eSewa refuses a reused transaction_uuid ("Duplicate transaction UUID."), even after an abandoned
   attempt, and the abandoned attempt stays PENDING (verified 2026-10-31). Hence paymentAttemptId().
 

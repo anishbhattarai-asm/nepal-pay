@@ -9,18 +9,19 @@ import { createApp } from './app.js';
 /** Gateways report COMPLETED only for references in this set. */
 const completed = new Set();
 
-/** Test switches: a slow initiate(), and an outage that makes every gateway call fail. */
-const gateway = { initiateDelayMs: 0, down: false };
+/**
+ * Test switches: a slow initiate(); an outage (`down` set to an error code) that fails every gateway
+ * call before it reaches the gateway; and `loseReply`, where Khalti creates the payment but its reply
+ * is lost on the way back.
+ */
+const gateway = { initiateDelayMs: 0, down: false, loseReply: false };
+const createdPidx = []; // every pidx the fake Khalti created, delivered or not
+
+const outage = (name, code) =>
+  Object.assign(new Error(`${name} request failed`), { name: 'PaymentError', code, gateway: name, retryable: true });
 
 function call(name) {
-  if (gateway.down) {
-    throw Object.assign(new Error(`${name} request failed`), {
-      name: 'PaymentError',
-      code: 'NETWORK_ERROR',
-      gateway: name,
-      retryable: true,
-    });
-  }
+  if (gateway.down) throw outage(name, gateway.down);
 }
 
 const fakeEsewa = {
@@ -46,6 +47,8 @@ const fakeKhalti = {
     await sleep(gateway.initiateDelayMs);
     call('khalti');
     const reference = `PIDX${++pidx}`;
+    createdPidx.push(reference);
+    if (gateway.loseReply) throw outage('khalti', 'TIMEOUT');
     return { type: 'redirect', url: `https://pay.khalti.test/?pidx=${reference}`, reference, raw: {} };
   },
   async parseCallback(query) {
@@ -104,6 +107,7 @@ beforeEach(() => {
   completed.clear();
   gateway.initiateDelayMs = 0;
   gateway.down = false;
+  gateway.loseReply = false;
 });
 
 describe('orders and payment attempts', () => {
@@ -220,17 +224,43 @@ describe('orders and payment attempts', () => {
     assert.equal((await status(order)).attempts.length, 2);
   });
 
-  it('answers 503 when the gateway is down, and the next try works', async () => {
+  it('answers 503 when Khalti times out before accepting a payment, and the next try works', async () => {
     const order = await newOrder();
-    gateway.down = true;
-    const res = await post(`/orders/${order}/pay/esewa`);
+    const before = createdPidx.length;
+    gateway.down = 'TIMEOUT';
+    const res = await post(`/orders/${order}/pay/khalti`);
     assert.equal(res.status, 503);
-    assert.match(await res.text(), /Nothing was changed/);
+    const html = await res.text();
+    assert.match(html, /not marked paid or failed/);
+    assert.match(html, new RegExp(`href="/orders/${order}"`));
+    assert.equal(createdPidx.length, before);
     assert.equal((await status(order)).attempts.length, 0);
 
     gateway.down = false;
-    assert.ok(await payEsewa(order));
+    assert.ok(await payKhalti(order));
     assert.equal((await status(order)).attempts.length, 1);
+  });
+
+  it('never shows or stores a Khalti payment whose reply was lost, and never pays an order from it', async () => {
+    const order = await newOrder();
+    gateway.loseReply = true;
+    const res = await post(`/orders/${order}/pay/khalti`);
+    assert.equal(res.status, 503);
+    const lost = createdPidx.at(-1); // created at Khalti, but the reply never arrived
+    assert.ok(!(await res.text()).includes(lost));
+    assert.deepEqual(await status(order), { id: order, status: 'UNPAID', attempts: [] });
+
+    // The retry is a new payment with a new pidx; the lost one cannot be reached and is never trusted.
+    gateway.loseReply = false;
+    const retry = await payKhalti(order);
+    assert.notEqual(retry, lost);
+    completed.add(lost);
+    assert.equal((await fetch(`${base}/khalti/callback?pidx=${lost}`)).status, 404);
+    assert.equal((await status(order)).status, 'UNPAID');
+
+    completed.add(retry);
+    await fetch(`${base}/khalti/callback?pidx=${retry}`);
+    assert.deepEqual(await status(order), { id: order, status: 'PAID', attempts: [{ gateway: 'khalti', status: 'COMPLETED' }] });
   });
 
   it('keeps an order unpaid while verify() fails, then pays it once the gateway answers', async () => {
@@ -238,8 +268,10 @@ describe('orders and payment attempts', () => {
     const attempt = await payEsewa(order);
     completed.add(attempt);
 
-    gateway.down = true;
-    assert.equal((await fetch(`${base}/esewa/callback?data=${attempt}`)).status, 503);
+    gateway.down = 'NETWORK_ERROR';
+    const res = await fetch(`${base}/esewa/callback?data=${attempt}`);
+    assert.equal(res.status, 503);
+    assert.match(await res.text(), new RegExp(`href="/orders/${order}"`));
     assert.deepEqual(await status(order), { id: order, status: 'UNPAID', attempts: [{ gateway: 'esewa', status: 'STARTED' }] });
 
     gateway.down = false;

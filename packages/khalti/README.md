@@ -48,8 +48,8 @@ stored pidx is what links a payment to an order. A full Express example with ret
 
 ## Retries
 
-Each `initiate()` returns a new pidx, and a payment page stays payable for 30 minutes, so an earlier
-attempt can complete after a new one starts. `paymentAttemptId(order.id)` gives each attempt its own
+Each `initiate()` returns a new pidx, and a payment page stays payable for 30 minutes in the sandbox
+(60 in production by default), so an earlier attempt can complete after a new one starts. `paymentAttemptId(order.id)` gives each attempt its own
 id; re-verifying earlier pidx values before a new attempt prevents charging an order twice.
 
 ## Security
@@ -83,13 +83,21 @@ optional `fetch` and `timeoutMs` (default 15000). `customer` is `{ name?, email?
 
 Errors are `PaymentError` with a `code`: `INVALID_CONFIG`, `INVALID_INPUT`, `AMOUNT_MISMATCH`,
 `GATEWAY_ERROR`, `NETWORK_ERROR`, `TIMEOUT`, `BROWSER_ENVIRONMENT`. Khalti's own error message is
-included in `GATEWAY_ERROR`. `retryable` is true for `NETWORK_ERROR`, `TIMEOUT` and HTTP 429 or 5xx.
-A failed `verify()` leaves the payment unknown, not failed; `verify()` only reads, so it is safe to
-repeat later. `raw` is Khalti's reply as received, with amounts in paisa.
+included in `GATEWAY_ERROR`. `retryable` is true for `NETWORK_ERROR`, `TIMEOUT` and HTTP 429 or 5xx,
+and means the failure is transient, not that the request had no effect:
+
+- After a failed `verify()` the payment is unknown, not failed; `verify()` only reads, so it is safe
+  to repeat later.
+- After a failed `initiate()` Khalti may already have created a payment. Its payment URL was in the
+  lost reply, so the customer never sees that page and it expires unpaid. Khalti has no idempotency
+  key and no lookup by `purchase_order_id`, so a new attempt uses a new `paymentAttemptId()`. The
+  client never retries by itself.
+
+`raw` is Khalti's reply as received, with amounts in paisa.
 
 ## Testing
 
-88 unit tests cover requests, paisa conversion, every status (including Expired and User canceled,
+89 unit tests cover requests, paisa conversion, every status (including Expired and User canceled,
 which Khalti answers with HTTP 400), lookup validation and callback parsing, using a callback and
 lookup reply recorded from a completed sandbox payment. Live tests against the Khalti sandbox start a
 payment and look it up when `KHALTI_SECRET_KEY` is set. CI runs on Node.js 22, 24 and 26.
@@ -100,6 +108,8 @@ Sandbox: merchant keys from [test-admin.khalti.com](https://test-admin.khalti.co
 
 ## Changelog
 
+- **0.2.4**: Documents what `retryable` means for `initiate()` and `verify()`; reply amounts with stray
+  commas such as `"1,2,3"` are rejected. Production payment pages last 60 minutes by default.
 - **0.2.3**: Errors have `retryable`, and a reply that times out or breaks after its headers gives
   `TIMEOUT` or `NETWORK_ERROR`.
 - **0.2.2**: First release built and staged by GitHub Actions, with npm provenance.

@@ -85,8 +85,9 @@ optional `fetch` and `timeoutMs` (default 15000). `failureUrl` defaults to `retu
 
 Errors are `PaymentError` with a `code`: `INVALID_CONFIG`, `INVALID_INPUT`, `SIGNATURE_MISMATCH`,
 `AMOUNT_MISMATCH`, `GATEWAY_ERROR`, `NETWORK_ERROR`, `TIMEOUT`, `BROWSER_ENVIRONMENT`. `retryable` is
-true for `NETWORK_ERROR`, `TIMEOUT` and HTTP 429 or 5xx. A failed `verify()` leaves the payment
-unknown, not failed; `verify()` only reads, so it is safe to repeat later.
+true for `NETWORK_ERROR`, `TIMEOUT` and HTTP 429 or 5xx, and means the failure is transient. A
+failed `verify()` leaves the payment unknown, not failed; `verify()` only reads, so it is safe to
+repeat later. `initiate()` signs the form locally and sends no request.
 
 ## Testing
 
@@ -100,6 +101,8 @@ password `Nepal@123`, token `123456`.
 
 ## Changelog
 
+- **0.2.4**: Amounts with stray commas such as `"1,2,3"` are rejected instead of read as 123.
+  Documents what `retryable` means.
 - **0.2.3**: Status replies must carry a whole-paisa amount. Errors have `retryable`, and a reply that
   times out or breaks after its headers gives `TIMEOUT` or `NETWORK_ERROR`.
 - **0.2.2**: First release built and staged by GitHub Actions, with npm provenance.

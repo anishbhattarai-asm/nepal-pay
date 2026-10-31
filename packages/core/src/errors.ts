@@ -21,7 +21,11 @@ export class PaymentError extends Error {
   readonly code: PaymentErrorCode;
   readonly gateway?: string;
   readonly details?: unknown;
-  /** True when the same call can succeed later: network failures, timeouts, gateway HTTP 429 and 5xx. */
+  /**
+   * True for transient failures (network, timeout, gateway HTTP 429 and 5xx) that may clear later.
+   * It does not say whether the request reached the gateway: verify() is safe to repeat, but a failed
+   * Khalti initiate() may still have created a payment.
+   */
   readonly retryable: boolean;
 
   constructor(code: PaymentErrorCode, message: string, opts: PaymentErrorOptions = {}) {

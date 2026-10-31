@@ -30,12 +30,15 @@ export const sameAmount = (a: number, b: number): boolean => toPaisa(a) === toPa
 /** Rupees as a plain decimal string ("100", "10.5"), the format gateways expect in forms and query strings. */
 export const formatRupees = (rupees: number): string => String(toPaisa(rupees) / 100);
 
+/** Plain digits or thousands groups ("1000.0", "1,000.0"); no signs, exponents or stray commas. */
+const AMOUNT_TEXT = /^(?:\d{1,3}(?:,\d{3})+|\d+)(?:\.\d+)?$/;
+
 /** Reads an amount a gateway sent as a number or a string such as "1,000.0". */
 export function parseAmount(value: unknown): number | undefined {
   if (typeof value === 'number') return Number.isFinite(value) ? value : undefined;
   if (typeof value !== 'string') return undefined;
-  const cleaned = value.replace(/,/g, '').trim();
-  if (cleaned === '') return undefined;
-  const n = Number(cleaned);
+  const text = value.trim();
+  if (!AMOUNT_TEXT.test(text)) return undefined;
+  const n = Number(text.replace(/,/g, ''));
   return Number.isFinite(n) ? n : undefined;
 }

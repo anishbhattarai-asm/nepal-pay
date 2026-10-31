@@ -69,4 +69,11 @@ describe('money', () => {
     expect(parseAmount(undefined)).toBeUndefined();
     expect(parseAmount(Number.NaN)).toBeUndefined();
   });
+
+  it('rejects malformed amount text instead of guessing', () => {
+    expect(parseAmount('12,345,678.90')).toBe(12345678.9);
+    for (const bad of ['1,2,3', '1,00', '1000,0', ',100', '100,', '-5', '+5', '1e3', '.5', '5.', '1 000', 'Infinity', '0x10']) {
+      expect(parseAmount(bad), bad).toBeUndefined();
+    }
+  });
 });

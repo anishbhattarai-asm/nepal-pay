@@ -75,6 +75,7 @@ export function createApp({ esewa, khalti, baseUrl, maxOrders = 500, maxAttempts
       return res.status(409).send(page('Payment already starting', `<p>A payment for this order is starting. ${back}.</p>`));
     }
     starting.add(order.id);
+    res.locals.orderId = order.id;
     try {
       await refreshAttempts(order);
       if (order.status !== 'UNPAID') return res.redirect(303, `/orders/${order.id}`);
@@ -142,6 +143,7 @@ export function createApp({ esewa, khalti, baseUrl, maxOrders = 500, maxAttempts
     if (!attempt || attempt.gateway !== 'esewa') {
       return res.status(404).send(page('Unknown payment', '<p>No eSewa payment matches this callback.</p>'));
     }
+    res.locals.orderId = attempt.orderId;
     const order = await check(attempt);
     res.send(orderPage(order, `Checked with eSewa: ${attempt.status}`, Boolean(khalti)));
   });
@@ -151,6 +153,7 @@ export function createApp({ esewa, khalti, baseUrl, maxOrders = 500, maxAttempts
     if (!attempt || attempt.gateway !== 'esewa') {
       return res.status(404).send(page('Unknown payment', '<p>No such eSewa payment.</p>'));
     }
+    res.locals.orderId = attempt.orderId;
     const order = await check(attempt);
     res.send(orderPage(order, `Checked with eSewa: ${attempt.status}`, Boolean(khalti)));
   });
@@ -159,11 +162,13 @@ export function createApp({ esewa, khalti, baseUrl, maxOrders = 500, maxAttempts
   app.post('/orders/:id/pay/khalti', (req, res) => {
     if (!khalti) return res.status(503).send(khaltiOff());
     return startPayment(req, res, async (order) => {
-      const result = await khalti.initiate({
-        amount: order.amount,
-        orderId: paymentAttemptId(order.id),
-        returnUrl: `${baseUrl}/khalti/callback`,
-        productName: 'nepal-pay demo order',
+      const attemptId = paymentAttemptId(order.id);
+      const input = { amount: order.amount, orderId: attemptId, returnUrl: `${baseUrl}/khalti/callback`, productName: 'nepal-pay demo order' };
+      const result = await khalti.initiate(input).catch((err) => {
+        // Khalti may have created a pidx before its reply was lost. That payment URL never reached the
+        // customer, so it cannot be paid and expires unused; the attempt id finds it in Khalti's dashboard.
+        if (isPaymentError(err) && err.retryable) console.warn(`[khalti] no reply for attempt ${attemptId}`);
+        throw err;
       });
       addAttempt(order, 'khalti', result.reference); // the pidx
       res.redirect(303, result.url);
@@ -179,6 +184,7 @@ export function createApp({ esewa, khalti, baseUrl, maxOrders = 500, maxAttempts
     if (!attempt || attempt.gateway !== 'khalti') {
       return res.status(404).send(page('Unknown payment', '<p>No Khalti payment matches this callback.</p>'));
     }
+    res.locals.orderId = attempt.orderId;
     const order = await check(attempt);
     res.send(orderPage(order, `Checked with Khalti: ${attempt.status}`, Boolean(khalti)));
   });
@@ -186,10 +192,13 @@ export function createApp({ esewa, khalti, baseUrl, maxOrders = 500, maxAttempts
   app.use((err, _req, res, _next) => {
     if (isPaymentError(err)) {
       console.warn(`[${err.gateway ?? 'payment'}] ${err.code}: ${err.message}`);
-      // Gateway down or slow: the order and its attempts are unchanged, and verify() is safe to repeat.
+      // Gateway down or slow: the outcome is unknown, so the order is neither paid nor failed. The order
+      // page's "Pay again" re-verifies earlier attempts before starting a new one.
       if (err.retryable) {
-        const body = `<p><code>${escapeHtml(err.code)}</code> The payment gateway did not answer. Nothing was changed; try again shortly.</p>`;
-        return res.status(503).send(page('Gateway unavailable', body));
+        const id = res.locals.orderId;
+        const next = id ? `<a href="/orders/${escapeHtml(id)}">Check the order</a> before paying again.` : '<a href="/">Start again</a>';
+        const body = `<p><code>${escapeHtml(err.code)}</code> The payment gateway did not answer in time, so this step did not finish. The order was not marked paid or failed.</p><p>${next}</p>`;
+        return res.status(503).send(page('Gateway did not answer', body));
       }
       const status = { INVALID_INPUT: 400, SIGNATURE_MISMATCH: 400, AMOUNT_MISMATCH: 409 }[err.code] ?? 502;
       return res

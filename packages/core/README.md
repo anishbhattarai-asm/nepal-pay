@@ -17,7 +17,7 @@ from both.
 
 | Export | Purpose |
 |-|-|
-| `PaymentError`, `isPaymentError()` | One error type with a `code` for every failure, and `retryable` for outages (network, timeout, HTTP 429 or 5xx). `isPaymentError()` works even when two copies of the package are installed. |
+| `PaymentError`, `isPaymentError()` | One error type with a `code` for every failure, and `retryable` for transient failures (network, timeout, HTTP 429 or 5xx). `retryable` does not mean the request had no effect. `isPaymentError()` works even when two copies of the package are installed. |
 | `PaymentStatus` | `COMPLETED`, `PENDING`, `FAILED`, `REFUNDED`, `CANCELED`. |
 | `paymentAttemptId()` | A fresh id for each payment attempt on an order, for "pay again". eSewa rejects reused ids. |
 | `InitiateInput`, `InitiateResult`, `VerifyResult`, `CallbackResult` | The shapes every gateway client uses. |

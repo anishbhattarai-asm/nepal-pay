@@ -19,6 +19,12 @@ function setup(...responses: Array<Response | Error>) {
 }
 
 describe('khalti.initiate', () => {
+  it('sends one request and never retries by itself, since Khalti may have created the payment', async () => {
+    const { khalti, calls } = setup(new TypeError('fetch failed'));
+    await expect(khalti.initiate(base)).rejects.toMatchObject({ code: 'NETWORK_ERROR', retryable: true });
+    expect(calls).toHaveLength(1);
+  });
+
   it('posts the payment and returns the redirect URL', async () => {
     const { khalti, calls } = setup(jsonResponse(success));
 
