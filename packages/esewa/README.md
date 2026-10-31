@@ -94,7 +94,8 @@ repeat later. `initiate()` signs the form locally and sends no request.
 103 unit tests cover signing, signature coverage, callback decoding, status mapping and error cases,
 using eSewa's documented callback as a fixture. Live tests against the eSewa sandbox check that a
 signed form is accepted, a tampered one is rejected (`ES104`), a reused id is rejected, and status
-lookups. CI runs on Node.js 22, 24 and 26.
+lookups. CI runs on Node.js 22, 24 and 26. A full payment through the sandbox (login, payment,
+callback, status) has not been recorded yet, because the sandbox login was unavailable when tested.
 
 Sandbox: product code `EPAYTEST`, secret `8gBm/:&EnhH.1/q`; customer login eSewa ID `9806800001`,
 password `Nepal@123`, token `123456`.
