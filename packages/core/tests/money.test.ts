@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { assertAmount, formatRupees, fromPaisa, parseAmount, sameAmount, toPaisa } from '../src/money';
+import { assertAmount, formatRupees, fromPaisa, isRupeeAmount, parseAmount, sameAmount, toPaisa } from '../src/money';
 
 describe('money', () => {
   it('converts rupees <-> paisa', () => {
@@ -8,6 +8,11 @@ describe('money', () => {
     expect(toPaisa(1234567.89)).toBe(123456789);
     expect(fromPaisa(1050)).toBe(10.5);
     expect(fromPaisa(1)).toBe(0.01);
+  });
+
+  it('accepts only whole-paisa rupee amounts in isRupeeAmount()', () => {
+    for (const ok of [0, 0.01, 10, 99.5, 100.25, 0.1 + 0.2, 1234567.89]) expect(isRupeeAmount(ok), String(ok)).toBe(true);
+    for (const bad of [99.996, 0.001, 10.555, -1, NaN, Infinity, Number.MAX_VALUE]) expect(isRupeeAmount(bad), String(bad)).toBe(false);
   });
 
   it('compares amounts safely', () => {

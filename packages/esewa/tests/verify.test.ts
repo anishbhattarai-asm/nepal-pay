@@ -89,7 +89,10 @@ describe('esewa.verify', () => {
     ['no status', { transaction_uuid: 'ORD-1', total_amount: 100 }, 'unexpected status response'],
     ['a JSON array', [], 'unexpected status response'],
     ['plain text', 'OK', 'unexpected status response'],
-    ['no total_amount', statusBody('COMPLETE', { total_amount: null }), 'no total_amount'],
+    ['no total_amount', statusBody('COMPLETE', { total_amount: null }), 'no whole-paisa total_amount'],
+    ['a fractional paisa total_amount', statusBody('COMPLETE', { total_amount: 99.996 }), 'no whole-paisa total_amount'],
+    ['a negative total_amount', statusBody('COMPLETE', { total_amount: -100 }), 'no whole-paisa total_amount'],
+    ['a non-numeric total_amount', statusBody('COMPLETE', { total_amount: 'lots' }), 'no whole-paisa total_amount'],
   ])('throws GATEWAY_ERROR for a response with %s', async (_label, body, message) => {
     const response = typeof body === 'string' ? new Response(body) : jsonResponse(body);
     const { esewa } = setup(response);

@@ -1,6 +1,7 @@
 // Checks the demo's order and retry logic with fake gateway clients, so no network is needed.
 import assert from 'node:assert/strict';
 import { createServer } from 'node:http';
+import { setTimeout as sleep } from 'node:timers/promises';
 import { brotliCompressSync } from 'node:zlib';
 import { after, before, beforeEach, describe, it } from 'node:test';
 import { createApp } from './app.js';
@@ -8,8 +9,24 @@ import { createApp } from './app.js';
 /** Gateways report COMPLETED only for references in this set. */
 const completed = new Set();
 
+/** Test switches: a slow initiate(), and an outage that makes every gateway call fail. */
+const gateway = { initiateDelayMs: 0, down: false };
+
+function call(name) {
+  if (gateway.down) {
+    throw Object.assign(new Error(`${name} request failed`), {
+      name: 'PaymentError',
+      code: 'NETWORK_ERROR',
+      gateway: name,
+      retryable: true,
+    });
+  }
+}
+
 const fakeEsewa = {
   async initiate(input) {
+    await sleep(gateway.initiateDelayMs);
+    call('esewa');
     const fields = { transaction_uuid: input.orderId, failure_url: input.failureUrl };
     return { type: 'form', action: 'https://esewa.test/form', fields, reference: input.orderId };
   },
@@ -17,6 +34,7 @@ const fakeEsewa = {
     return { reference: data, orderId: data, claimedStatus: 'COMPLETED', signatureValid: true, raw: {} };
   },
   async verify({ orderId, amount }) {
+    call('esewa');
     const done = completed.has(orderId);
     return { status: done ? 'COMPLETED' : 'PENDING', amount, orderId, transactionId: done ? `T-${orderId}` : undefined, raw: {} };
   },
@@ -25,6 +43,8 @@ const fakeEsewa = {
 let pidx = 0;
 const fakeKhalti = {
   async initiate() {
+    await sleep(gateway.initiateDelayMs);
+    call('khalti');
     const reference = `PIDX${++pidx}`;
     return { type: 'redirect', url: `https://pay.khalti.test/?pidx=${reference}`, reference, raw: {} };
   },
@@ -32,6 +52,7 @@ const fakeKhalti = {
     return { reference: query.pidx, orderId: query.purchase_order_id, claimedStatus: 'COMPLETED', signatureValid: null, raw: query };
   },
   async verify({ pidx: ref, expectedAmount }) {
+    call('khalti');
     const done = completed.has(ref);
     return { status: done ? 'COMPLETED' : 'PENDING', amount: expectedAmount, transactionId: done ? `K-${ref}` : undefined, raw: {} };
   },
@@ -79,7 +100,11 @@ const status = async (orderId) => (await fetch(`${base}/orders/${orderId}/status
 
 before(() => start());
 after(() => server.close());
-beforeEach(() => completed.clear());
+beforeEach(() => {
+  completed.clear();
+  gateway.initiateDelayMs = 0;
+  gateway.down = false;
+});
 
 describe('orders and payment attempts', () => {
   it('creates an order with a random id and shows it unpaid', async () => {
@@ -176,11 +201,50 @@ describe('orders and payment attempts', () => {
 
   it('rejects bad amounts without creating an order', async () => {
     const before = orders.size;
-    for (const amount of ['', 'abc', '-5', '0', '10.555', '1e3']) {
+    for (const amount of ['', 'abc', '-5', '0', '10.555', '1e3', '9'.repeat(400), `1${'0'.repeat(17)}`]) {
       const res = await post('/orders', { amount });
       assert.equal(res.status, 400, `amount ${JSON.stringify(amount)}`);
     }
     assert.equal(orders.size, before);
+  });
+
+  it('starts one payment at a time when two requests for an order arrive together', async () => {
+    const order = await newOrder();
+    gateway.initiateDelayMs = 50;
+    const [a, b] = await Promise.all([post(`/orders/${order}/pay/esewa`), post(`/orders/${order}/pay/esewa`)]);
+    assert.deepEqual([a.status, b.status].sort(), [200, 409]);
+    assert.equal((await status(order)).attempts.length, 1);
+
+    const [c, d] = await Promise.all([post(`/orders/${order}/pay/esewa`), post(`/orders/${order}/pay/khalti`)]);
+    assert.equal([c.status, d.status].filter((code) => code === 409).length, 1);
+    assert.equal((await status(order)).attempts.length, 2);
+  });
+
+  it('answers 503 when the gateway is down, and the next try works', async () => {
+    const order = await newOrder();
+    gateway.down = true;
+    const res = await post(`/orders/${order}/pay/esewa`);
+    assert.equal(res.status, 503);
+    assert.match(await res.text(), /Nothing was changed/);
+    assert.equal((await status(order)).attempts.length, 0);
+
+    gateway.down = false;
+    assert.ok(await payEsewa(order));
+    assert.equal((await status(order)).attempts.length, 1);
+  });
+
+  it('keeps an order unpaid while verify() fails, then pays it once the gateway answers', async () => {
+    const order = await newOrder();
+    const attempt = await payEsewa(order);
+    completed.add(attempt);
+
+    gateway.down = true;
+    assert.equal((await fetch(`${base}/esewa/callback?data=${attempt}`)).status, 503);
+    assert.deepEqual(await status(order), { id: order, status: 'UNPAID', attempts: [{ gateway: 'esewa', status: 'STARTED' }] });
+
+    gateway.down = false;
+    await fetch(`${base}/esewa/callback?data=${attempt}`);
+    assert.equal((await status(order)).status, 'PAID');
   });
 
   it('refuses compressed request bodies (415)', async () => {
@@ -201,6 +265,16 @@ describe('limits and configuration', () => {
     assert.equal(orders.size, 3);
     assert.equal((await fetch(`${base}/orders/${ids[0]}`)).status, 404);
     assert.equal((await fetch(`${base}/orders/${ids[3]}`)).status, 200);
+  });
+
+  it('stops at maxAttempts payment attempts per order', async () => {
+    server.close();
+    await start({ maxAttempts: 2 });
+    const order = await newOrder();
+    assert.ok(await payEsewa(order));
+    assert.ok(await payKhalti(order));
+    assert.equal((await post(`/orders/${order}/pay/esewa`)).status, 429);
+    assert.equal((await status(order)).attempts.length, 2);
   });
 
   it('turns Khalti off cleanly without a key', async () => {

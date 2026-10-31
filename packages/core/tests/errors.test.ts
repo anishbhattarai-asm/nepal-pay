@@ -26,6 +26,30 @@ describe('PaymentError', () => {
   });
 });
 
+describe('PaymentError.retryable', () => {
+  it('is true for network failures and timeouts by default', () => {
+    expect(new PaymentError('NETWORK_ERROR', 'x').retryable).toBe(true);
+    expect(new PaymentError('TIMEOUT', 'x').retryable).toBe(true);
+  });
+
+  it('is false for every other code by default', () => {
+    const codes = [
+      'INVALID_CONFIG',
+      'INVALID_INPUT',
+      'GATEWAY_ERROR',
+      'SIGNATURE_MISMATCH',
+      'AMOUNT_MISMATCH',
+      'BROWSER_ENVIRONMENT',
+    ] as const;
+    for (const code of codes) expect(new PaymentError(code, 'x').retryable, code).toBe(false);
+  });
+
+  it('can be set explicitly', () => {
+    expect(new PaymentError('GATEWAY_ERROR', 'x', { retryable: true }).retryable).toBe(true);
+    expect(new PaymentError('NETWORK_ERROR', 'x', { retryable: false }).retryable).toBe(false);
+  });
+});
+
 describe('isPaymentError', () => {
   it('accepts a PaymentError', () => {
     expect(isPaymentError(new PaymentError('TIMEOUT', 'slow'))).toBe(true);

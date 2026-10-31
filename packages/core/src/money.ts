@@ -14,6 +14,13 @@ export function assertAmount(amount: number, gateway?: string): void {
   }
 }
 
+/** True for a finite, non-negative rupee amount in whole paisa (at most 2 decimals). */
+export function isRupeeAmount(value: number): boolean {
+  if (!Number.isFinite(value) || value < 0) return false;
+  const paisa = value * 100;
+  return Math.abs(paisa - Math.round(paisa)) <= 1e-6 && Number.isSafeInteger(Math.round(paisa));
+}
+
 export const toPaisa = (rupees: number): number => Math.round(rupees * 100);
 export const fromPaisa = (paisa: number): number => paisa / 100;
 

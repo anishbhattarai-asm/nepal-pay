@@ -83,7 +83,9 @@ optional `fetch` and `timeoutMs` (default 15000). `customer` is `{ name?, email?
 
 Errors are `PaymentError` with a `code`: `INVALID_CONFIG`, `INVALID_INPUT`, `AMOUNT_MISMATCH`,
 `GATEWAY_ERROR`, `NETWORK_ERROR`, `TIMEOUT`, `BROWSER_ENVIRONMENT`. Khalti's own error message is
-included in `GATEWAY_ERROR`.
+included in `GATEWAY_ERROR`. `retryable` is true for `NETWORK_ERROR`, `TIMEOUT` and HTTP 429 or 5xx.
+A failed `verify()` leaves the payment unknown, not failed; `verify()` only reads, so it is safe to
+repeat later. `raw` is Khalti's reply as received, with amounts in paisa.
 
 ## Testing
 
@@ -98,6 +100,8 @@ Sandbox: merchant keys from [test-admin.khalti.com](https://test-admin.khalti.co
 
 ## Changelog
 
+- **0.2.3**: Errors have `retryable`, and a reply that times out or breaks after its headers gives
+  `TIMEOUT` or `NETWORK_ERROR`.
 - **0.2.2**: First release built and staged by GitHub Actions, with npm provenance.
 - **0.2.1**: Documentation only.
 - **0.2.0**: `paymentAttemptId()` for retries. `https` URLs in production (breaking for `http`), `https`

@@ -13,12 +13,16 @@ export interface PaymentErrorOptions {
   gateway?: string;
   details?: unknown;
   cause?: unknown;
+  /** Defaults to true for NETWORK_ERROR and TIMEOUT, false otherwise. */
+  retryable?: boolean;
 }
 
 export class PaymentError extends Error {
   readonly code: PaymentErrorCode;
   readonly gateway?: string;
   readonly details?: unknown;
+  /** True when the same call can succeed later: network failures, timeouts, gateway HTTP 429 and 5xx. */
+  readonly retryable: boolean;
 
   constructor(code: PaymentErrorCode, message: string, opts: PaymentErrorOptions = {}) {
     super(message, { cause: opts.cause });
@@ -26,6 +30,7 @@ export class PaymentError extends Error {
     this.code = code;
     this.gateway = opts.gateway;
     this.details = opts.details;
+    this.retryable = opts.retryable ?? (code === 'NETWORK_ERROR' || code === 'TIMEOUT');
   }
 }
 

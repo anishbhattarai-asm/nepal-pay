@@ -117,11 +117,60 @@ describe('requestJson', () => {
     });
   });
 
+  it('turns a body that stalls after the headers into TIMEOUT', async () => {
+    const stalling = ((_input: unknown, init?: RequestInit) => {
+      const body = new ReadableStream<Uint8Array>({
+        start(controller) {
+          controller.enqueue(new TextEncoder().encode('{"status":'));
+          init?.signal?.addEventListener('abort', () => controller.error(init.signal?.reason));
+        },
+      });
+      return Promise.resolve(new Response(body));
+    }) as typeof globalThis.fetch;
+
+    await expect(requestJson({ gateway: 'g', url: URL_, fetch: stalling, timeoutMs: 20 })).rejects.toMatchObject({
+      code: 'TIMEOUT',
+      message: 'g request timed out',
+      retryable: true,
+    });
+  });
+
+  it('turns a body that breaks mid-stream into NETWORK_ERROR and keeps the cause', async () => {
+    const cause = new TypeError('terminated');
+    const body = new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(new TextEncoder().encode('{"status":'));
+        controller.error(cause);
+      },
+    });
+    await expect(requestJson({ gateway: 'g', url: URL_, fetch: fakeFetch(new Response(body)).fetch })).rejects.toMatchObject({
+      code: 'NETWORK_ERROR',
+      message: 'g request failed',
+      cause,
+      retryable: true,
+    });
+  });
+
+  it.each([
+    [429, true],
+    [500, true],
+    [502, true],
+    [503, true],
+    [400, false],
+    [401, false],
+    [404, false],
+  ])('marks HTTP %i as retryable: %s', async (status, retryable) => {
+    await expect(
+      requestJson({ gateway: 'g', url: URL_, fetch: fakeFetch(json({}, status)).fetch }),
+    ).rejects.toMatchObject({ code: 'GATEWAY_ERROR', retryable });
+  });
+
   it('refuses a response that declares more than the size limit', async () => {
     const big = new Response('{}', { headers: { 'Content-Length': '2000000' } });
     await expect(requestJson({ gateway: 'g', url: URL_, fetch: fakeFetch(big).fetch })).rejects.toMatchObject({
       code: 'GATEWAY_ERROR',
       message: 'g response is larger than 1000000 bytes',
+      retryable: false,
     });
   });
 

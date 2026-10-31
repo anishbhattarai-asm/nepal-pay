@@ -6,9 +6,10 @@ import { isPaymentError, paymentAttemptId } from '@nepalpay/esewa';
  * Demo checkout with in-memory orders. Each order has one or more payment attempts with unique ids;
  * earlier attempts are re-verified before a new one starts, and an order is paid only after verify().
  */
-export function createApp({ esewa, khalti, baseUrl, maxOrders = 500 }) {
+export function createApp({ esewa, khalti, baseUrl, maxOrders = 500, maxAttempts = 10 }) {
   const orders = new Map(); // order id -> order
   const attempts = new Map(); // attempt reference -> attempt
+  const starting = new Set(); // order ids with a payment start in progress
   const app = express();
   // Forms are never compressed; refusing compressed bodies keeps client bytes away from zlib (CVE-2026-111497).
   app.use(express.urlencoded({ extended: false, inflate: false }));
@@ -61,6 +62,32 @@ export function createApp({ esewa, khalti, baseUrl, maxOrders = 500 }) {
     }
   }
 
+  /**
+   * Starts one payment attempt for an unpaid order. One start runs per order at a time, so two
+   * simultaneous requests (double click, two tabs) cannot open two payments; a database-backed app
+   * gets the same guarantee from a row lock or a conditional update on the order.
+   */
+  async function startPayment(req, res, begin) {
+    const order = findOrder(req, res);
+    if (!order) return;
+    const back = `<a href="/orders/${escapeHtml(order.id)}">Back to the order</a>`;
+    if (starting.has(order.id)) {
+      return res.status(409).send(page('Payment already starting', `<p>A payment for this order is starting. ${back}.</p>`));
+    }
+    starting.add(order.id);
+    try {
+      await refreshAttempts(order);
+      if (order.status !== 'UNPAID') return res.redirect(303, `/orders/${order.id}`);
+      if (order.attempts.length >= maxAttempts) {
+        const body = `<p>This order has reached ${maxAttempts} payment attempts. <a href="/">New order</a></p>`;
+        return res.status(429).send(page('Too many attempts', body));
+      }
+      await begin(order);
+    } finally {
+      starting.delete(order.id);
+    }
+  }
+
   function findOrder(req, res) {
     const order = orders.get(req.params.id);
     if (!order) res.status(404).send(page('Unknown order', '<p>No such order. <a href="/">Start again</a>.</p>'));
@@ -73,10 +100,12 @@ export function createApp({ esewa, khalti, baseUrl, maxOrders = 500 }) {
 
   app.post('/orders', (req, res) => {
     const raw = String(req.body?.amount ?? '').trim();
-    if (!/^\d+(\.\d{1,2})?$/.test(raw) || Number(raw) <= 0) {
+    const amount = Number(raw);
+    // The pattern alone allows hundreds of digits, so the amount must also be a safe number of paisa.
+    if (!/^\d+(\.\d{1,2})?$/.test(raw) || amount <= 0 || !Number.isSafeInteger(Math.round(amount * 100))) {
       return res.status(400).send(page('Bad request', '<p><code>INVALID_INPUT</code> Enter an amount in rupees, like 100 or 99.50.</p>'));
     }
-    res.redirect(303, `/orders/${createOrder(Number(raw)).id}`);
+    res.redirect(303, `/orders/${createOrder(amount).id}`);
   });
 
   app.get('/orders/:id', (req, res) => {
@@ -92,22 +121,19 @@ export function createApp({ esewa, khalti, baseUrl, maxOrders = 500 }) {
   });
 
   // eSewa: initiate returns a signed form that the browser must POST to eSewa.
-  app.post('/orders/:id/pay/esewa', async (req, res) => {
-    const order = findOrder(req, res);
-    if (!order) return;
-    await refreshAttempts(order);
-    if (order.status !== 'UNPAID') return res.redirect(303, `/orders/${order.id}`);
-
-    const attemptId = paymentAttemptId(order.id);
-    const result = await esewa.initiate({
-      amount: order.amount,
-      orderId: attemptId,
-      returnUrl: `${baseUrl}/esewa/callback`,
-      failureUrl: `${baseUrl}/esewa/failure/${attemptId}`,
-    });
-    addAttempt(order, 'esewa', result.reference);
-    res.send(autoPostForm(result.action, result.fields));
-  });
+  app.post('/orders/:id/pay/esewa', (req, res) =>
+    startPayment(req, res, async (order) => {
+      const attemptId = paymentAttemptId(order.id);
+      const result = await esewa.initiate({
+        amount: order.amount,
+        orderId: attemptId,
+        returnUrl: `${baseUrl}/esewa/callback`,
+        failureUrl: `${baseUrl}/esewa/failure/${attemptId}`,
+      });
+      addAttempt(order, 'esewa', result.reference);
+      res.send(autoPostForm(result.action, result.fields));
+    }),
+  );
 
   app.get('/esewa/callback', async (req, res) => {
     const claim = await esewa.parseCallback({ data: firstString(req.query.data) });
@@ -130,21 +156,18 @@ export function createApp({ esewa, khalti, baseUrl, maxOrders = 500 }) {
   });
 
   // Khalti: initiate returns a payment_url to redirect the browser to.
-  app.post('/orders/:id/pay/khalti', async (req, res) => {
+  app.post('/orders/:id/pay/khalti', (req, res) => {
     if (!khalti) return res.status(503).send(khaltiOff());
-    const order = findOrder(req, res);
-    if (!order) return;
-    await refreshAttempts(order);
-    if (order.status !== 'UNPAID') return res.redirect(303, `/orders/${order.id}`);
-
-    const result = await khalti.initiate({
-      amount: order.amount,
-      orderId: paymentAttemptId(order.id),
-      returnUrl: `${baseUrl}/khalti/callback`,
-      productName: 'nepal-pay demo order',
+    return startPayment(req, res, async (order) => {
+      const result = await khalti.initiate({
+        amount: order.amount,
+        orderId: paymentAttemptId(order.id),
+        returnUrl: `${baseUrl}/khalti/callback`,
+        productName: 'nepal-pay demo order',
+      });
+      addAttempt(order, 'khalti', result.reference); // the pidx
+      res.redirect(303, result.url);
     });
-    addAttempt(order, 'khalti', result.reference); // the pidx
-    res.redirect(303, result.url);
   });
 
   app.get('/khalti/callback', async (req, res) => {
@@ -162,8 +185,13 @@ export function createApp({ esewa, khalti, baseUrl, maxOrders = 500 }) {
 
   app.use((err, _req, res, _next) => {
     if (isPaymentError(err)) {
-      const status = { INVALID_INPUT: 400, SIGNATURE_MISMATCH: 400, AMOUNT_MISMATCH: 409 }[err.code] ?? 502;
       console.warn(`[${err.gateway ?? 'payment'}] ${err.code}: ${err.message}`);
+      // Gateway down or slow: the order and its attempts are unchanged, and verify() is safe to repeat.
+      if (err.retryable) {
+        const body = `<p><code>${escapeHtml(err.code)}</code> The payment gateway did not answer. Nothing was changed; try again shortly.</p>`;
+        return res.status(503).send(page('Gateway unavailable', body));
+      }
+      const status = { INVALID_INPUT: 400, SIGNATURE_MISMATCH: 400, AMOUNT_MISMATCH: 409 }[err.code] ?? 502;
       return res
         .status(status)
         .send(page('Payment error', `<p><code>${escapeHtml(err.code)}</code> ${escapeHtml(err.message)}</p>`));

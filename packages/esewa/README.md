@@ -60,7 +60,7 @@ id; re-verifying earlier attempts before a new one prevents charging an order tw
 | Status | `verify()` returns `COMPLETED` only from eSewa's status API |
 | Amount | A completed payment for a different amount throws `AMOUNT_MISMATCH` |
 | Callback | HMAC-SHA256, constant-time compare; signature must cover status, amount, transaction id and product code; product code must match; data over 4 KB refused |
-| Status reply | Must echo the same transaction id and product code; replies over 1 MB refused |
+| Status reply | Must echo the same transaction id and product code, with a whole-paisa amount; replies over 1 MB refused |
 | URLs | `returnUrl` and `failureUrl` must be `https` in production |
 | Runtime | Refuses to start in a browser page or worker |
 
@@ -84,11 +84,13 @@ optional `fetch` and `timeoutMs` (default 15000). `failureUrl` defaults to `retu
 | `FAILED` | NOT_FOUND, other |
 
 Errors are `PaymentError` with a `code`: `INVALID_CONFIG`, `INVALID_INPUT`, `SIGNATURE_MISMATCH`,
-`AMOUNT_MISMATCH`, `GATEWAY_ERROR`, `NETWORK_ERROR`, `TIMEOUT`, `BROWSER_ENVIRONMENT`.
+`AMOUNT_MISMATCH`, `GATEWAY_ERROR`, `NETWORK_ERROR`, `TIMEOUT`, `BROWSER_ENVIRONMENT`. `retryable` is
+true for `NETWORK_ERROR`, `TIMEOUT` and HTTP 429 or 5xx. A failed `verify()` leaves the payment
+unknown, not failed; `verify()` only reads, so it is safe to repeat later.
 
 ## Testing
 
-100 unit tests cover signing, signature coverage, callback decoding, status mapping and error cases,
+103 unit tests cover signing, signature coverage, callback decoding, status mapping and error cases,
 using eSewa's documented callback as a fixture. Live tests against the eSewa sandbox check that a
 signed form is accepted, a tampered one is rejected (`ES104`), a reused id is rejected, and status
 lookups. CI runs on Node.js 22, 24 and 26.
@@ -98,6 +100,8 @@ password `Nepal@123`, token `123456`.
 
 ## Changelog
 
+- **0.2.3**: Status replies must carry a whole-paisa amount. Errors have `retryable`, and a reply that
+  times out or breaks after its headers gives `TIMEOUT` or `NETWORK_ERROR`.
 - **0.2.2**: First release built and staged by GitHub Actions, with npm provenance.
 - **0.2.1**: Documentation only.
 - **0.2.0**: `paymentAttemptId()` for retries. `https` callback URLs in production (breaking for `http`).

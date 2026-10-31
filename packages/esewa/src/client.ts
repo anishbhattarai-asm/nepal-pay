@@ -5,6 +5,7 @@ import {
   assertServerSide,
   formatRupees,
   isRecord,
+  isRupeeAmount,
   parseAmount,
   PaymentError,
   PaymentStatus,
@@ -101,7 +102,9 @@ export function createEsewa(config: EsewaConfig): EsewaClient {
         throw gatewayError('status response is for a different product code', res);
       }
       const amount = parseAmount(res.total_amount);
-      if (amount === undefined) throw gatewayError('status response has no total_amount', res);
+      if (amount === undefined || !isRupeeAmount(amount)) {
+        throw gatewayError('status response has no whole-paisa total_amount', res);
+      }
 
       // eSewa answers NOT_FOUND for a wrong amount; this check covers a malformed reply.
       const status = mapEsewaStatus(res.status);

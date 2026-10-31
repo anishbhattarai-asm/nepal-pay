@@ -33,15 +33,16 @@ export async function requestJson<T = unknown>(opts: RequestOptions): Promise<T>
       signal: AbortSignal.timeout(opts.timeoutMs ?? 15_000),
     });
   } catch (err) {
-    const timedOut = err instanceof Error && err.name === 'TimeoutError';
-    throw new PaymentError(
-      timedOut ? 'TIMEOUT' : 'NETWORK_ERROR',
-      timedOut ? `${opts.gateway} request timed out` : `${opts.gateway} request failed`,
-      { gateway: opts.gateway, cause: err },
-    );
+    throw transportError(err, opts.gateway);
   }
 
-  const text = await readText(res, opts.maxResponseBytes ?? DEFAULT_MAX_RESPONSE_BYTES, opts.gateway);
+  // The body can still time out or break after the headers arrive.
+  let text: string;
+  try {
+    text = await readText(res, opts.maxResponseBytes ?? DEFAULT_MAX_RESPONSE_BYTES, opts.gateway);
+  } catch (err) {
+    throw err instanceof PaymentError ? err : transportError(err, opts.gateway);
+  }
   let data: unknown = text;
   try {
     data = text ? JSON.parse(text) : null;
@@ -54,10 +55,24 @@ export async function requestJson<T = unknown>(opts: RequestOptions): Promise<T>
     throw new PaymentError(
       'GATEWAY_ERROR',
       `${opts.gateway} responded with HTTP ${res.status}${reason ? `: ${reason}` : ''}`,
-      { gateway: opts.gateway, details: { status: res.status, body: data } },
+      {
+        gateway: opts.gateway,
+        details: { status: res.status, body: data },
+        retryable: res.status === 429 || res.status >= 500,
+      },
     );
   }
   return data as T;
+}
+
+/** Maps a failed request or body read to TIMEOUT or NETWORK_ERROR. */
+function transportError(err: unknown, gateway: string): PaymentError {
+  const timedOut = err instanceof Error && err.name === 'TimeoutError';
+  return new PaymentError(
+    timedOut ? 'TIMEOUT' : 'NETWORK_ERROR',
+    timedOut ? `${gateway} request timed out` : `${gateway} request failed`,
+    { gateway, cause: err },
+  );
 }
 
 /** Reads the body as text, stopping once it passes `limit` bytes. */

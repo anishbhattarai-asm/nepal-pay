@@ -23,7 +23,11 @@
    never a reused one. Callbacks are matched by attempt, and an order is paid by verify(), once.
 9. Production means https for every callback and website URL.
 10. Trust nothing about size or identity from outside: callback data is capped at 4 KB, gateway
-    replies at 1 MB, and replies must name the same transaction, pidx and product code we asked about.
+    replies at 1 MB, and replies must name the same transaction, pidx and product code we asked about,
+    with a whole-paisa amount.
+11. Every transport failure is a PaymentError, including a reply body that stalls or breaks after the
+    headers. retryable is true for NETWORK_ERROR, TIMEOUT and HTTP 429 or 5xx, so callers can tell an
+    outage from a bug. A failed verify() never means a failed payment.
 
 ## Status mapping
 COMPLETED | PENDING | FAILED | REFUNDED | CANCELED, with the original response kept in raw.
@@ -44,5 +48,6 @@ COMPLETED | PENDING | FAILED | REFUNDED | CANCELED, with the original response k
 
 ## Tests
 - Unit tests (npm test, CI) inject fetch and never touch the network. The demo's own tests
-  (examples/express-demo/demo.test.mjs) use fake gateway clients to cover retries and double payment.
+  (examples/express-demo/demo.test.mjs) use fake gateway clients to cover retries, double payment,
+  simultaneous checkout requests, attempt limits and outages.
 - tests/live and the demo smoke test (npm run test:live) hit the real sandboxes.

@@ -39,7 +39,12 @@ A payment counts as completed only when `verify()` returns `COMPLETED`.
 
 ## Usage
 
-`db` stands for the application's own storage.
+`db` stands for the application's own storage, with one record per order and one per payment attempt:
+
+| Record | Fields |
+|-|-|
+| Order | `id`, `amount` (rupees), `status` (`UNPAID`, `PAID`, `PAID_TWICE`) |
+| Attempt | `id` (eSewa `transaction_uuid` or Khalti pidx), `orderId`, `gateway`, `status`, `transactionId` |
 
 ### eSewa
 
@@ -102,6 +107,27 @@ An order can need several payment attempts (abandoned page, insufficient balance
   so an earlier attempt can still complete after a new one starts.
 - The demo therefore re-verifies earlier attempts before starting a new one, matches each callback to
   its attempt, and marks an order `PAID_TWICE` when two attempts complete, for a refund.
+- Two requests for one order can arrive together (double click, two tabs). The demo runs one payment
+  start per order at a time and caps attempts per order (`maxAttempts`, default 10). With a database,
+  the same guard is a row lock (`SELECT ... FOR UPDATE`) or a conditional update on the order.
+
+## Gateway outages
+
+Neither gateway publishes a health endpoint, so an outage shows up as an error from `verify()` or
+Khalti's `initiate()`. `error.retryable` tells whether repeating the call can help:
+
+| Error | `retryable` | Cause |
+|-|-|-|
+| `NETWORK_ERROR` | true | Gateway unreachable, or the connection broke during the reply |
+| `TIMEOUT` | true | No complete reply within `timeoutMs` (default 15000) |
+| `GATEWAY_ERROR`, HTTP 429 or 5xx | true | Rate limit or maintenance; `details.status` holds the HTTP status |
+| Any other error | false | Input, configuration, signature or amount problem; a repeat gives the same result |
+
+A failed `verify()` says nothing about the payment itself: the customer may already have paid. The
+attempt keeps its last known status and is verified again later, on the next callback, a status
+check or a scheduled job; `verify()` only reads, so repeating it is safe. A failed `initiate()` leaves
+no attempt behind. The `fetch` option accepts a wrapper for retries, circuit breaking or logging. The
+demo answers 503 for retryable errors and leaves the order unchanged.
 
 ## Security model
 
@@ -112,16 +138,27 @@ Enforced by the library:
 | Payment status | `verify()` asks the gateway and returns `COMPLETED` only from the gateway's reply |
 | Amount | A completed payment for a different amount throws `AMOUNT_MISMATCH` |
 | eSewa callbacks | HMAC-SHA256 checked with a constant-time compare; the signature must cover status, amount, transaction id and product code, and the product code must match the client |
-| Gateway replies | Must name the same transaction (eSewa) or pidx (Khalti) and product code; replies over 1 MB are refused |
+| Gateway replies | Must name the same transaction (eSewa) or pidx (Khalti) and product code, with a whole-paisa amount; replies over 1 MB are refused |
 | Callback input | eSewa data over 4 KB is refused; Khalti amounts must be whole paisa |
 | URLs | Callback and website URLs must be `https` in production; Khalti `payment_url` must be `https` |
 | Configuration | `environment` is required; there is no default |
 | Runtime | Clients refuse to start in a browser page or worker (misuse detection, not a boundary) |
 
-Handled by the application: storing attempts and matching callbacks to them, re-verifying earlier
-attempts before a new one, idempotent fulfilment, and keeping secret keys on the server.
-
 Vulnerability reports: see [SECURITY.md](SECURITY.md).
+
+## Production checklist
+
+| Area | Library | Application |
+|-|-|-|
+| Secret keys | Refuses to run in a browser | Keeps keys in environment variables or a secret store, separate for sandbox and production |
+| HTTPS | Requires `https` callback and website URLs in production | Serves the callback routes over HTTPS |
+| Payment status | `verify()` asks the gateway and checks the amount | Marks an order paid only from `verify()`, never from the redirect |
+| Attempts | `paymentAttemptId()` gives each attempt its own id | Stores each attempt before redirecting and matches callbacks to it |
+| Concurrency | Application only | Starts one attempt per order at a time (row lock or conditional update) |
+| Fulfilment | Application only | Fulfils each order once, even when a callback arrives twice |
+| Outages | Typed errors with `retryable` | Keeps attempts on errors and verifies them again later |
+| Reconciliation | Application only | Re-verifies unfinished attempts on a schedule, catching customers who never return to the site |
+| Refunds | Application only | Refunds `PAID_TWICE` orders and returns through the gateway's merchant portal |
 
 ## API
 
@@ -143,7 +180,8 @@ Client options: `environment`, gateway keys (`productCode` and `secretKey`, or `
 | `CANCELED` | CANCELED | User canceled |
 | `FAILED` | NOT_FOUND, other | Expired, other |
 
-Errors are `PaymentError` instances with a `code`; `isPaymentError()` works across package copies.
+Results include `raw`, the gateway's reply as received (Khalti amounts in paisa). Errors are
+`PaymentError` instances with a `code` and `retryable`; `isPaymentError()` works across package copies.
 
 | Code | Meaning |
 |-|-|
@@ -159,7 +197,7 @@ Errors are `PaymentError` instances with a `code`; `isPaymentError()` works acro
 
 | Suite | Command | Covers |
 |-|-|-|
-| Unit (255 tests) | `npm run check` | Signing and signature coverage, every status mapping, amount and paisa handling, URL and size limits, error mapping, retries and double payment in the demo |
+| Unit (275 tests) | `npm run check` | Signing and signature coverage, every status mapping, amount and paisa handling, URL and size limits, error mapping including stalled and broken replies, and in the demo: retries, double payment, simultaneous checkout requests and outages |
 | Live sandbox | `npm run test:live` | Signed form accepted by eSewa, tampered signature rejected (`ES104`), reused id rejected, status lookups, Khalti initiate and lookup (with `KHALTI_SECRET_KEY`) |
 | CI | GitHub Actions | Build, typecheck and unit tests on Node.js 22, 24 and 26 for every push |
 
