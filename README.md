@@ -11,6 +11,9 @@ before reporting it as completed.
 
 Unofficial; not affiliated with eSewa or Khalti.
 
+Guide: [Accepting eSewa and Khalti in Node.js: the redirect is not the payment](https://dev.to/anishbhattaraiasm/accepting-esewa-and-khalti-in-nodejs-the-redirect-is-not-the-payment-4pgo) walks
+through the mistakes this library prevents, with a Next.js integration.
+
 | Package | Gateway |
 |-|-|
 | [`@nepalpay/esewa`](https://www.npmjs.com/package/@nepalpay/esewa) | eSewa ePay v2 |
