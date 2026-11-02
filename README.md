@@ -234,6 +234,8 @@ A staged version goes live after approval with 2FA on npmjs.com (Staged Packages
 
 Sandbox credentials: eSewa uses the public product code `EPAYTEST` and secret `8gBm/:&EnhH.1/q`;
 Khalti keys come from [test-admin.khalti.com](https://test-admin.khalti.com/#/join/merchant).
+Customer logins used for the recorded payments: eSewa ID `9711111111`, MPIN `1122`; Khalti ID
+`9800000001`, MPIN `1111`.
 TypeScript is pinned to 5.9 because tsup's declaration build does not support TypeScript 7.
 Design notes: [ARCHITECTURE.md](ARCHITECTURE.md).
 

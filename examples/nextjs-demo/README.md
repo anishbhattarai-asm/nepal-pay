@@ -11,8 +11,7 @@ npm run demo:next    # http://localhost:3000
 ```
 
 Set `KHALTI_SECRET_KEY` (from test-admin.khalti.com) to enable Khalti. Sandbox logins: eSewa ID
-`9806800001`, password `Nepal@123`, token `123456`; Khalti ID `9800000001`, MPIN `1111`, OTP
-`987654`.
+`9711111111`, MPIN `1122`; Khalti ID `9800000001`, MPIN `1111` (OTP `987654` if asked).
 
 ## Files
 

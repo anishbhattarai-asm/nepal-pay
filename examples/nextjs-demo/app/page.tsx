@@ -17,7 +17,7 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ i
         </p>
       )}
       <p>
-        eSewa sandbox login: eSewa ID <code>9806800001</code>, password <code>Nepal@123</code>, token <code>123456</code>.
+        eSewa sandbox login: eSewa ID <code>9711111111</code>, MPIN <code>1122</code>.
       </p>
     </>
   );

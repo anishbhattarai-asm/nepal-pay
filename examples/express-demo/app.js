@@ -254,7 +254,7 @@ function homePage() {
   <label>Amount (Rs) <input name="amount" inputmode="decimal" value="100" required></label>
   <button>Create order</button>
 </form>
-<p>eSewa sandbox login: eSewa ID <code>9806800001</code>, password <code>Nepal@123</code>, token <code>123456</code>.</p>`,
+<p>eSewa sandbox login: eSewa ID <code>9711111111</code>, MPIN <code>1122</code>.</p>`,
   );
 }
 

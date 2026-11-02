@@ -98,8 +98,8 @@ eSewa sandbox check that a signed form is accepted, a tampered one is rejected (
 id is rejected, and status lookups. CI runs on Node.js 22, 24 and 26. A full payment through the sandbox (login, payment,
 signed callback, status `COMPLETE`) went through the repo's demo on 2026-11-02.
 
-Sandbox: product code `EPAYTEST`, secret `8gBm/:&EnhH.1/q`; customer login eSewa ID `9806800001`,
-password `Nepal@123`, token `123456`.
+Sandbox: product code `EPAYTEST`, secret `8gBm/:&EnhH.1/q`; customer login eSewa ID `9711111111`,
+MPIN `1122` (used for the recorded payments).
 
 ## Changelog
 
