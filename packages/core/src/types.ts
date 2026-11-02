@@ -72,8 +72,13 @@ export interface CallbackResult {
   raw: unknown;
 }
 
-export interface PaymentGateway<TVerifyInput, TCallbackInput, TInitiateResult extends InitiateResult = InitiateResult> {
-  initiate(input: InitiateInput): Promise<TInitiateResult>;
+export interface PaymentGateway<
+  TVerifyInput,
+  TCallbackInput,
+  TInitiateResult extends InitiateResult = InitiateResult,
+  TInitiateInput = InitiateInput,
+> {
+  initiate(input: TInitiateInput): Promise<TInitiateResult>;
   verify(input: TVerifyInput): Promise<VerifyResult>;
   parseCallback(input: TCallbackInput): Promise<CallbackResult>;
 }

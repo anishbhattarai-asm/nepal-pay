@@ -19,6 +19,7 @@ through the mistakes this library prevents, with a Next.js integration.
 | [`@nepalpay/esewa`](https://www.npmjs.com/package/@nepalpay/esewa) | eSewa ePay v2 |
 | [`@nepalpay/khalti`](https://www.npmjs.com/package/@nepalpay/khalti) | Khalti ePayment (KPG-2) |
 | [`@nepalpay/core`](https://www.npmjs.com/package/@nepalpay/core) | Shared types and errors, installed with either gateway |
+| [`@nepalpay/connectips`](packages/connectips) | connectIPS (NCHL); not released yet, waiting for UAT test access |
 
 Node.js 22 or newer. ESM, CommonJS and TypeScript types. Uses only `fetch` and Web Crypto.
 
@@ -211,7 +212,7 @@ Results include `raw`, the gateway's reply as received (Khalti amounts in paisa)
 
 | Suite | Command | Covers |
 |-|-|-|
-| Unit (302 tests) | `npm run check` | Signing and signature coverage, every status mapping, amount and paisa handling, URL and size limits, error mapping including stalled and broken replies, and in both demos: retries, double payment, simultaneous checkout requests, outages, forged callbacks and a Khalti start whose reply was lost |
+| Unit (382 tests) | `npm run check` | Signing and signature coverage, every status mapping, amount and paisa handling, URL and size limits, error mapping including stalled and broken replies, and in both demos: retries, double payment, simultaneous checkout requests, outages, forged callbacks and a Khalti start whose reply was lost |
 | Live sandbox | `npm run test:live` | Signed form accepted by eSewa, tampered signature rejected (`ES104`), reused id rejected, status lookups, Khalti initiate and lookup (with `KHALTI_SECRET_KEY`) |
 | CI | GitHub Actions | Build (including the Next.js demo), typecheck and unit tests on Node.js 22, 24 and 26 for every push |
 

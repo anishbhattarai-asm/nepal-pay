@@ -15,6 +15,22 @@ describe('paymentAttemptId', () => {
     expect(ids.size).toBe(5000);
   });
 
+  it('fits maxLength by shortening the order id and keeping the random part', () => {
+    const id = paymentAttemptId('ORD-0123456789abcdef', { maxLength: 20 });
+    expect(id).toHaveLength(20);
+    expect(id).toMatch(/^ORD-0123456-[a-z0-9]{8}$/);
+    expect(paymentAttemptId('ORD-1', { maxLength: 20 })).toMatch(/^ORD-1-[a-z0-9]{8}$/);
+  });
+
+  it('keeps ids unique under maxLength', () => {
+    const ids = new Set(Array.from({ length: 5000 }, () => paymentAttemptId('ORD-0123456789abcdef', { maxLength: 20 })));
+    expect(ids.size).toBe(5000);
+  });
+
+  it.each([9, 0, 12.5, Number.NaN])('rejects maxLength %s', (maxLength) => {
+    expect(() => paymentAttemptId('ORD-1', { maxLength })).toThrow(expect.objectContaining({ code: 'INVALID_INPUT' }));
+  });
+
   it.each(['', '   ', undefined])('rejects an empty order id (%j)', (orderId) => {
     expect(() => paymentAttemptId(orderId as string)).toThrow(expect.objectContaining({ code: 'INVALID_INPUT' }));
   });

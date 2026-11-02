@@ -2,8 +2,9 @@
 
 ## Packages
 - core: shared types, PaymentError (with codes), status enum, HTTP helper, money + guard helpers.
-- esewa / khalti: one package per gateway, versioned independently with npm version.
-  Each depends only on core. No other runtime dependencies.
+- esewa / khalti / connectips: one package per gateway, versioned independently with npm version.
+  Each depends only on core. No other runtime dependencies. connectips is private (unpublished) and
+  left out of scripts/release.mjs until a UAT payment has gone through it.
 
 ## Every gateway client exposes the same shape
 - initiate(input)      -> { type: 'redirect', url } | { type: 'form', action, fields }
@@ -52,6 +53,10 @@ COMPLETED | PENDING | FAILED | REFUNDED | CANCELED, with the original response k
   production per Khalti's docs, checked 2026-10-31).
 - eSewa refuses a reused transaction_uuid ("Duplicate transaction UUID."), even after an abandoned
   attempt, and the abandoned attempt stays PENDING (verified 2026-10-31). Hence paymentAttemptId().
+- connectIPS (from NCHL's docs, not yet verified in UAT): success and failure URLs are registered
+  with NCHL, and the redirect carries only TXNID, unsigned. TXNID is at most 20 characters, hence
+  paymentAttemptId(orderId, { maxLength: 20 }). The TOKEN is SHA256withRSA over a fixed field string
+  with the key from the creditor .pfx; Web Crypto cannot read .pfx, so the key is passed as PEM.
 
 ## Tests
 - Unit tests (npm test, CI) inject fetch and never touch the network. The demo's own tests
