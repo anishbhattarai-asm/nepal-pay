@@ -11,6 +11,7 @@ import {
   PaymentStatus,
   requestJson,
   sameAmount,
+  type FormInitiateResult,
   type PaymentGateway,
 } from '@nepalpay/core';
 import { decodeCallbackData } from './callback';
@@ -38,7 +39,7 @@ export interface EsewaCallbackInput {
   data: string;
 }
 
-export type EsewaClient = PaymentGateway<EsewaVerifyInput, EsewaCallbackInput>;
+export type EsewaClient = PaymentGateway<EsewaVerifyInput, EsewaCallbackInput, FormInitiateResult>;
 
 const gatewayError = (message: string, raw: unknown) =>
   new PaymentError('GATEWAY_ERROR', `esewa: ${message}`, { gateway: GATEWAY, details: raw });

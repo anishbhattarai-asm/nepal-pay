@@ -92,10 +92,10 @@ repeat later. `initiate()` signs the form locally and sends no request.
 
 ## Testing
 
-103 unit tests cover signing, signature coverage, callback decoding, status mapping and error cases,
-using eSewa's documented callback as a fixture. Live tests against the eSewa sandbox check that a
-signed form is accepted, a tampered one is rejected (`ES104`), a reused id is rejected, and status
-lookups. CI runs on Node.js 22, 24 and 26. A full payment through the sandbox (login, payment,
+109 unit tests cover signing, signature coverage, callback decoding, status mapping and error cases,
+using eSewa's documented callback and a real sandbox callback as fixtures. Live tests against the
+eSewa sandbox check that a signed form is accepted, a tampered one is rejected (`ES104`), a reused
+id is rejected, and status lookups. CI runs on Node.js 22, 24 and 26. A full payment through the sandbox (login, payment,
 signed callback, status `COMPLETE`) went through the repo's demo on 2026-11-02.
 
 Sandbox: product code `EPAYTEST`, secret `8gBm/:&EnhH.1/q`; customer login eSewa ID `9806800001`,
@@ -103,6 +103,8 @@ password `Nepal@123`, token `123456`.
 
 ## Changelog
 
+- **0.2.5**: `initiate()` is typed as returning the form (`FormInitiateResult`), so its fields need no
+  type check. Docs: a full sandbox payment is recorded, and there is a Next.js example.
 - **0.2.4**: Amounts with stray commas such as `"1,2,3"` are rejected instead of read as 123.
   Documents what `retryable` means.
 - **0.2.3**: Status replies must carry a whole-paisa amount. Errors have `retryable`, and a reply that

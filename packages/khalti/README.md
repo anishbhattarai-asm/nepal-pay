@@ -98,7 +98,7 @@ and means the failure is transient, not that the request had no effect:
 
 ## Testing
 
-89 unit tests cover requests, paisa conversion, every status (including Expired and User canceled,
+90 unit tests cover requests, paisa conversion, every status (including Expired and User canceled,
 which Khalti answers with HTTP 400), lookup validation and callback parsing, using a callback and
 lookup reply recorded from a completed sandbox payment. Live tests against the Khalti sandbox start a
 payment and look it up when `KHALTI_SECRET_KEY` is set. CI runs on Node.js 22, 24 and 26.
@@ -109,6 +109,8 @@ Sandbox: merchant keys from [test-admin.khalti.com](https://test-admin.khalti.co
 
 ## Changelog
 
+- **0.2.5**: `initiate()` is typed as returning the redirect (`RedirectInitiateResult`), so `url` needs no
+  type check. Docs: a Next.js example.
 - **0.2.4**: Documents what `retryable` means for `initiate()` and `verify()`; reply amounts with stray
   commas such as `"1,2,3"` are rejected. Production payment pages last 60 minutes by default.
 - **0.2.3**: Errors have `retryable`, and a reply that times out or breaks after its headers gives

@@ -1,21 +1,22 @@
-import { describe, expect, it } from 'vitest';
-import type { InitiateInput, InitiateResult } from '@nepalpay/core';
+import { describe, expect, expectTypeOf, it } from 'vitest';
+import type { FormInitiateResult, InitiateInput } from '@nepalpay/core';
 import { createEsewa } from '../src/client';
 import { paymentAttemptId } from '../src';
 import { mockFetch, nodeHmac, UAT } from './helpers';
 
 const base: InitiateInput = { amount: 100, orderId: 'ORD-1', returnUrl: 'https://shop.example/esewa/ok' };
 
-function asForm(result: InitiateResult) {
-  if (result.type !== 'form') throw new Error('expected a form result');
-  return result;
-}
-
 describe('esewa.initiate', () => {
+  it('is typed as a form, so callers read fields without narrowing', async () => {
+    const result = await createEsewa({ environment: 'sandbox', ...UAT }).initiate(base);
+    expectTypeOf(result).toEqualTypeOf<FormInitiateResult>();
+    expect(result.fields.signature).toBeTypeOf('string');
+  });
+
   it('returns a signed form for the sandbox', async () => {
     const { fetch, calls } = mockFetch();
     const esewa = createEsewa({ environment: 'sandbox', ...UAT, fetch });
-    const result = asForm(await esewa.initiate({ ...base, failureUrl: 'https://shop.example/esewa/fail' }));
+    const result = await esewa.initiate({ ...base, failureUrl: 'https://shop.example/esewa/fail' });
 
     expect(result.action).toBe('https://rc-epay.esewa.com.np/api/epay/main/v2/form');
     expect(result.reference).toBe('ORD-1');
@@ -37,7 +38,7 @@ describe('esewa.initiate', () => {
 
   it('posts to the production form URL in production', async () => {
     const esewa = createEsewa({ environment: 'production', productCode: 'MERCHANT', secretKey: 'live-secret' });
-    const result = asForm(await esewa.initiate(base));
+    const result = await esewa.initiate(base);
     expect(result.action).toBe('https://epay.esewa.com.np/api/epay/main/v2/form');
     expect(result.fields.product_code).toBe('MERCHANT');
     expect(result.fields.signature).toBe(nodeHmac('live-secret', 'total_amount=100,transaction_uuid=ORD-1,product_code=MERCHANT'));
@@ -56,22 +57,20 @@ describe('esewa.initiate', () => {
   });
 
   it('allows http callback URLs in the sandbox (local development)', async () => {
-    const result = asForm(
-      await createEsewa({ environment: 'sandbox', ...UAT }).initiate({ ...base, returnUrl: 'http://localhost:3000/cb' }),
-    );
+    const result = await createEsewa({ environment: 'sandbox', ...UAT }).initiate({ ...base, returnUrl: 'http://localhost:3000/cb' });
     expect(result.fields.success_url).toBe('http://localhost:3000/cb');
   });
 
   it('takes a paymentAttemptId as the transaction_uuid for each retry', async () => {
     const esewa = createEsewa({ environment: 'sandbox', ...UAT });
-    const first = asForm(await esewa.initiate({ ...base, orderId: paymentAttemptId('ORD-1') }));
-    const retry = asForm(await esewa.initiate({ ...base, orderId: paymentAttemptId('ORD-1') }));
+    const first = await esewa.initiate({ ...base, orderId: paymentAttemptId('ORD-1') });
+    const retry = await esewa.initiate({ ...base, orderId: paymentAttemptId('ORD-1') });
     expect(first.fields.transaction_uuid).toMatch(/^ORD-1-[a-z0-9]{8}$/);
     expect(retry.fields.transaction_uuid).not.toBe(first.fields.transaction_uuid);
   });
 
   it('defaults failure_url to returnUrl', async () => {
-    const result = asForm(await createEsewa({ environment: 'sandbox', ...UAT }).initiate(base));
+    const result = await createEsewa({ environment: 'sandbox', ...UAT }).initiate(base);
     expect(result.fields.failure_url).toBe(base.returnUrl);
   });
 
@@ -81,7 +80,7 @@ describe('esewa.initiate', () => {
     [1234.56, '1234.56'],
     [0.1 + 0.2, '0.3'],
   ])('formats %s rupees as "%s" in both amount fields and the signature', async (amount, text) => {
-    const result = asForm(await createEsewa({ environment: 'sandbox', ...UAT }).initiate({ ...base, amount }));
+    const result = await createEsewa({ environment: 'sandbox', ...UAT }).initiate({ ...base, amount });
     expect(result.fields.amount).toBe(text);
     expect(result.fields.total_amount).toBe(text);
     expect(result.fields.signature).toBe(

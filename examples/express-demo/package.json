@@ -9,7 +9,7 @@
   },
   "dependencies": {
     "express": "^5.1.0",
-    "@nepalpay/esewa": "^0.2.4",
-    "@nepalpay/khalti": "^0.2.4"
+    "@nepalpay/esewa": "^0.2.5",
+    "@nepalpay/khalti": "^0.2.5"
   }
 }

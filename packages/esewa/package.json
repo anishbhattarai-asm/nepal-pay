@@ -1,6 +1,6 @@
 {
   "name": "@nepalpay/esewa",
-  "version": "0.2.4",
+  "version": "0.2.5",
   "description": "Unofficial zero-dependency eSewa ePay v2 SDK for Node.js and edge runtimes",
   "keywords": [
     "esewa",
@@ -43,7 +43,7 @@
     "node": ">=22"
   },
   "dependencies": {
-    "@nepalpay/core": "^0.2.4"
+    "@nepalpay/core": "^0.2.5"
   },
   "scripts": {
     "build": "tsup",

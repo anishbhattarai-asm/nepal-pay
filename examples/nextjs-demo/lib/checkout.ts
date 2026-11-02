@@ -123,7 +123,6 @@ export function createCheckout({ esewa, khalti, baseUrl, maxOrders = 500, maxAtt
           returnUrl: `${baseUrl}/esewa/callback`,
           failureUrl: `${baseUrl}/esewa/failure/${attemptId}`,
         });
-        if (form.type !== 'form') throw new Error('eSewa returned no form');
         addAttempt(order, 'esewa', form.reference);
         return { kind: 'form', action: form.action, fields: form.fields };
       }
@@ -134,7 +133,6 @@ export function createCheckout({ esewa, khalti, baseUrl, maxOrders = 500, maxAtt
         if (isPaymentError(err) && err.retryable) console.warn(`[khalti] no reply for attempt ${attemptId}`);
         throw err;
       });
-      if (started.type !== 'redirect') throw new Error('Khalti returned no payment URL');
       addAttempt(order, 'khalti', started.reference); // the pidx
       return { kind: 'redirect', url: started.url };
     } finally {

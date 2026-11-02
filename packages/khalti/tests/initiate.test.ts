@@ -1,5 +1,5 @@
-import { describe, expect, it } from 'vitest';
-import type { InitiateInput } from '@nepalpay/core';
+import { describe, expect, expectTypeOf, it } from 'vitest';
+import type { InitiateInput, RedirectInitiateResult } from '@nepalpay/core';
 import { createKhalti } from '../src/client';
 import { jsonResponse, mockFetch, SANDBOX } from './helpers';
 
@@ -19,6 +19,12 @@ function setup(...responses: Array<Response | Error>) {
 }
 
 describe('khalti.initiate', () => {
+  it('is typed as a redirect, so callers read url without narrowing', async () => {
+    const result = await setup(jsonResponse(success)).khalti.initiate(base);
+    expectTypeOf(result).toEqualTypeOf<RedirectInitiateResult>();
+    expect(result.url).toBe(success.payment_url);
+  });
+
   it('sends one request and never retries by itself, since Khalti may have created the payment', async () => {
     const { khalti, calls } = setup(new TypeError('fetch failed'));
     await expect(khalti.initiate(base)).rejects.toMatchObject({ code: 'NETWORK_ERROR', retryable: true });

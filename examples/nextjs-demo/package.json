@@ -9,8 +9,8 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@nepalpay/esewa": "^0.2.4",
-    "@nepalpay/khalti": "^0.2.4",
+    "@nepalpay/esewa": "^0.2.5",
+    "@nepalpay/khalti": "^0.2.5",
     "next": "^16.4.3",
     "react": "^19.3.1",
     "react-dom": "^19.3.1"

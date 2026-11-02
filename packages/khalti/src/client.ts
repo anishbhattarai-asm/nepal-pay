@@ -15,6 +15,7 @@ import {
   toPaisa,
   type Customer,
   type PaymentGateway,
+  type RedirectInitiateResult,
 } from '@nepalpay/core';
 import { resolveConfig, type KhaltiConfig } from './config';
 import { mapKhaltiStatus } from './mapStatus';
@@ -33,7 +34,7 @@ export interface KhaltiVerifyInput {
 /** Query params Khalti appends to return_url: pass req.query, a URLSearchParams, a query string or the full URL. */
 export type KhaltiCallbackInput = Record<string, unknown> | URLSearchParams | string;
 
-export type KhaltiClient = PaymentGateway<KhaltiVerifyInput, KhaltiCallbackInput>;
+export type KhaltiClient = PaymentGateway<KhaltiVerifyInput, KhaltiCallbackInput, RedirectInitiateResult>;
 
 const gatewayError = (message: string, raw: unknown) =>
   new PaymentError('GATEWAY_ERROR', `khalti: ${message}`, { gateway: GATEWAY, details: raw });

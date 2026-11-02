@@ -32,9 +32,23 @@ export interface InitiateInput {
   customer?: Customer;
 }
 
-export type InitiateResult =
-  | { type: 'redirect'; url: string; reference: string; raw: unknown }
-  | { type: 'form'; action: string; fields: Record<string, string>; reference: string };
+export type InitiateResult = RedirectInitiateResult | FormInitiateResult;
+
+/** The browser goes to `url` (Khalti). */
+export interface RedirectInitiateResult {
+  type: 'redirect';
+  url: string;
+  reference: string;
+  raw: unknown;
+}
+
+/** The browser POSTs `fields` to `action` (eSewa). */
+export interface FormInitiateResult {
+  type: 'form';
+  action: string;
+  fields: Record<string, string>;
+  reference: string;
+}
 
 export interface VerifyResult {
   status: PaymentStatus;
@@ -58,8 +72,8 @@ export interface CallbackResult {
   raw: unknown;
 }
 
-export interface PaymentGateway<TVerifyInput, TCallbackInput> {
-  initiate(input: InitiateInput): Promise<InitiateResult>;
+export interface PaymentGateway<TVerifyInput, TCallbackInput, TInitiateResult extends InitiateResult = InitiateResult> {
+  initiate(input: InitiateInput): Promise<TInitiateResult>;
   verify(input: TVerifyInput): Promise<VerifyResult>;
   parseCallback(input: TCallbackInput): Promise<CallbackResult>;
 }
