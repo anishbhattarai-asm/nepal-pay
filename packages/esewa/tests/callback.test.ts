@@ -13,6 +13,16 @@ const DOCUMENTED_JSON =
   '"signature":"62GcfZTmVkzhtUeh+QJ1AqiJrjoWWGof3U+eTPTZ7fA="}';
 const DOCUMENTED_DATA = Buffer.from(DOCUMENTED_JSON).toString('base64');
 
+/**
+ * A real sandbox callback, recorded on 2026-11-02 from a completed Rs 100 payment. Unlike the
+ * documented example, total_amount arrives as the string "100.0".
+ */
+const SANDBOX_DATA =
+  'eyJ0cmFuc2FjdGlvbl9jb2RlIjoiMDAwSEVMNCIsInN0YXR1cyI6IkNPTVBMRVRFIiwidG90YWxfYW1vdW50IjoiMTAwLjAiLCJ0cmFuc2FjdGlvbl91dWlkIjoi' +
+  'T1JELTFjMzRkNzE5OTUyODQ5ZGUteWl5ZXhrdGYiLCJwcm9kdWN0X2NvZGUiOiJFUEFZVEVTVCIsInNpZ25lZF9maWVsZF9uYW1lcyI6InRyYW5zYWN0aW9uX2Nv' +
+  'ZGUsc3RhdHVzLHRvdGFsX2Ftb3VudCx0cmFuc2FjdGlvbl91dWlkLHByb2R1Y3RfY29kZSxzaWduZWRfZmllbGRfbmFtZXMiLCJzaWduYXR1cmUiOiJxSE9OZWFM' +
+  'dEEvSWljYWxOYUFlRTJIWFJRdEd5T2pxNVRrMklLRjRTSkpzPSJ9';
+
 const completeFields = {
   transaction_code: { raw: '000AWEO' },
   status: { raw: 'COMPLETE' },
@@ -40,6 +50,28 @@ describe('esewa.parseCallback', () => {
         signature: '62GcfZTmVkzhtUeh+QJ1AqiJrjoWWGof3U+eTPTZ7fA=',
       },
     });
+  });
+
+  it('accepts a real sandbox callback from a completed payment', async () => {
+    await expect(esewa.parseCallback({ data: SANDBOX_DATA })).resolves.toMatchObject({
+      reference: 'ORD-1c34d719952849de-yiyexktf',
+      transactionId: '000HEL4',
+      claimedStatus: 'COMPLETED',
+      amount: 100,
+      signatureValid: true,
+      raw: { total_amount: '100.0', status: 'COMPLETE' },
+    });
+  });
+
+  it.each([
+    ['status', 'PENDING'],
+    ['total_amount', '1.0'],
+    ['transaction_uuid', 'ORD-1c34d719952849de-other'],
+    ['transaction_code', '000FAKE'],
+  ])('rejects the real sandbox callback once %s is changed', async (field, value) => {
+    const fields = JSON.parse(Buffer.from(SANDBOX_DATA, 'base64').toString('utf8'));
+    const data = Buffer.from(JSON.stringify({ ...fields, [field]: value })).toString('base64');
+    await expect(esewa.parseCallback({ data })).rejects.toMatchObject({ code: 'SIGNATURE_MISMATCH' });
   });
 
   it('accepts a total sent as a string with a thousands separator', async () => {

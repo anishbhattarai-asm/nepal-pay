@@ -43,8 +43,9 @@ if (result.status === 'COMPLETED') await db.orders.markPaid(order.id, result.tra
 
 A payment counts as completed only when `verify()` returns `COMPLETED`; the return redirect is
 unsigned and only reports a claim. Khalti's lookup does not return the merchant's order id, so the
-stored pidx is what links a payment to an order. A full Express example with retries is in the repo's
-[`examples/express-demo`](https://github.com/anishbhattarai-asm/nepal-pay/tree/main/examples/express-demo).
+stored pidx is what links a payment to an order. Full examples with retries are in the repo:
+[Express](https://github.com/anishbhattarai-asm/nepal-pay/tree/main/examples/express-demo) and
+[Next.js](https://github.com/anishbhattarai-asm/nepal-pay/tree/main/examples/nextjs-demo).
 
 ## Retries
 

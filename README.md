@@ -94,9 +94,10 @@ const result = await khalti.verify({ pidx: attempt.id, expectedAmount: order.amo
 if (result.status === 'COMPLETED') await db.orders.markPaid(order.id, result.transactionId);
 ```
 
-A complete Express app with both gateways, retries included, is in
-[`examples/express-demo`](examples/express-demo). It keeps orders in memory and is a local sandbox
-demo, not a deployable app.
+Complete apps with both gateways, retries included, are in
+[`examples/express-demo`](examples/express-demo) (Express) and
+[`examples/nextjs-demo`](examples/nextjs-demo) (Next.js App Router, route handlers and a server
+action). Both keep orders in memory and are local sandbox demos, not deployable apps.
 
 ## Retries
 
@@ -207,13 +208,14 @@ Results include `raw`, the gateway's reply as received (Khalti amounts in paisa)
 
 | Suite | Command | Covers |
 |-|-|-|
-| Unit (278 tests) | `npm run check` | Signing and signature coverage, every status mapping, amount and paisa handling, URL and size limits, error mapping including stalled and broken replies, and in the demo: retries, double payment, simultaneous checkout requests, outages and a Khalti start whose reply was lost |
+| Unit (300 tests) | `npm run check` | Signing and signature coverage, every status mapping, amount and paisa handling, URL and size limits, error mapping including stalled and broken replies, and in both demos: retries, double payment, simultaneous checkout requests, outages, forged callbacks and a Khalti start whose reply was lost |
 | Live sandbox | `npm run test:live` | Signed form accepted by eSewa, tampered signature rejected (`ES104`), reused id rejected, status lookups, Khalti initiate and lookup (with `KHALTI_SECRET_KEY`) |
-| CI | GitHub Actions | Build, typecheck and unit tests on Node.js 22, 24 and 26 for every push |
+| CI | GitHub Actions | Build (including the Next.js demo), typecheck and unit tests on Node.js 22, 24 and 26 for every push |
 
-Unit tests use fixtures recorded from the gateways, including eSewa's documented callback and a
-completed Khalti sandbox payment. A full eSewa sandbox payment (login, payment, signed callback,
-status `COMPLETE`) went through the demo on 2026-11-02.
+Unit tests use fixtures recorded from the gateways: eSewa's documented callback, a real eSewa
+sandbox callback from a completed payment, and a completed Khalti sandbox payment. Full sandbox
+payments (login, payment, callback, status check) went through both demos on 2026-11-02: eSewa
+through the Express demo, eSewa and Khalti through the Next.js demo's production build.
 
 ## Development
 
@@ -221,7 +223,8 @@ status `COMPLETE`) went through the demo on 2026-11-02.
 npm ci
 npm run check        # build, typecheck, unit tests
 npm run test:live    # real eSewa and Khalti sandboxes
-npm run demo         # http://localhost:3000; KHALTI_SECRET_KEY enables Khalti
+npm run demo         # Express demo on http://localhost:3000; KHALTI_SECRET_KEY enables Khalti
+npm run demo:next    # Next.js demo on http://localhost:3000
 ```
 
 Releases go through the **Release** workflow (Actions tab, Run workflow). It runs the full check and

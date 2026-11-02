@@ -19,12 +19,14 @@
   ],
   "scripts": {
     "build": "npm run build --workspaces --if-present",
+    "build:packages": "npm run build -w packages/core -w packages/esewa -w packages/khalti",
     "typecheck": "npm run typecheck --workspaces --if-present",
     "test": "npm run test --workspaces --if-present",
     "test:live": "npm run test:live --workspaces --if-present",
     "check": "npm run build && npm run typecheck && npm test",
-    "demo": "npm run build && npm start -w express-demo",
-    "release": "npm run check && node scripts/release.mjs"
+    "demo": "npm run build:packages && npm start -w express-demo",
+    "release": "npm run check && node scripts/release.mjs",
+    "demo:next": "npm run build:packages && npm run dev -w nextjs-demo"
   },
   "engines": {
     "node": ">=22"

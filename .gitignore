@@ -3,3 +3,7 @@ dist/
 coverage/
 .env
 *.log
+.next/
+next-env.d.ts
+*.tsbuildinfo
+examples/nextjs-demo/AGENTS.md

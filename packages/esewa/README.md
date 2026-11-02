@@ -44,8 +44,9 @@ if (result.status === 'COMPLETED') await db.orders.markPaid(order.id, result.tra
 ```
 
 A payment counts as completed only when `verify()` returns `COMPLETED`; `parseCallback()` reports what
-the redirect claims. A full Express example with retries is in the repo's
-[`examples/express-demo`](https://github.com/anishbhattarai-asm/nepal-pay/tree/main/examples/express-demo).
+the redirect claims. Full examples with retries are in the repo:
+[Express](https://github.com/anishbhattarai-asm/nepal-pay/tree/main/examples/express-demo) and
+[Next.js](https://github.com/anishbhattarai-asm/nepal-pay/tree/main/examples/nextjs-demo).
 
 ## Retries
 

@@ -34,8 +34,9 @@
 COMPLETED | PENDING | FAILED | REFUNDED | CANCELED, with the original response kept in raw.
 
 ## Gateway quirks handled (verified 2026-10-30)
-- eSewa signs the raw text of each callback value ("1000.0") but sends numbers as JSON numbers,
-  so the callback decoder keeps raw text instead of using plain JSON.parse.
+- eSewa signs the raw text of each callback value ("1000.0"). Its documented example sends the total
+  as a JSON number, a real sandbox callback (2026-11-02) as a string, so the callback decoder keeps
+  raw text instead of using plain JSON.parse.
 - eSewa's status API echoes the queried amount and answers NOT_FOUND when it is wrong, even for a
   completed payment (verified 2026-11-02).
 - Khalti's lookup answers Expired and User canceled with HTTP 400 and a normal body; verify() maps them.
@@ -55,5 +56,7 @@ COMPLETED | PENDING | FAILED | REFUNDED | CANCELED, with the original response k
 ## Tests
 - Unit tests (npm test, CI) inject fetch and never touch the network. The demo's own tests
   (examples/express-demo/demo.test.mjs) use fake gateway clients to cover retries, double payment,
-  simultaneous checkout requests, attempt limits and outages.
+  simultaneous checkout requests, attempt limits and outages. The Next.js demo's tests
+  (examples/nextjs-demo/tests) cover the same checkout logic and its route handlers with the real
+  sandbox client and a stubbed status API.
 - tests/live and the demo smoke test (npm run test:live) hit the real sandboxes.
