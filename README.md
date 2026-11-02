@@ -212,7 +212,8 @@ Results include `raw`, the gateway's reply as received (Khalti amounts in paisa)
 | CI | GitHub Actions | Build, typecheck and unit tests on Node.js 22, 24 and 26 for every push |
 
 Unit tests use fixtures recorded from the gateways, including eSewa's documented callback and a
-completed Khalti sandbox payment. A completed eSewa sandbox payment has not been recorded yet.
+completed Khalti sandbox payment. A full eSewa sandbox payment (login, payment, signed callback,
+status `COMPLETE`) went through the demo on 2026-11-02.
 
 ## Development
 

@@ -36,7 +36,8 @@ COMPLETED | PENDING | FAILED | REFUNDED | CANCELED, with the original response k
 ## Gateway quirks handled (verified 2026-10-30)
 - eSewa signs the raw text of each callback value ("1000.0") but sends numbers as JSON numbers,
   so the callback decoder keeps raw text instead of using plain JSON.parse.
-- eSewa's status API echoes the queried amount and answers NOT_FOUND when it is wrong.
+- eSewa's status API echoes the queried amount and answers NOT_FOUND when it is wrong, even for a
+  completed payment (verified 2026-11-02).
 - Khalti's lookup answers Expired and User canceled with HTTP 400 and a normal body; verify() maps them.
 - Khalti status casing varies, so it is matched case-insensitively.
 - An eSewa callback names its own signed fields, so parseCallback() requires the signature to cover
