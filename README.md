@@ -114,6 +114,10 @@ An order can need several payment attempts (abandoned page, insufficient balance
   one starts.
 - The demo therefore re-verifies earlier attempts before starting a new one, matches each callback to
   its attempt, and marks an order `PAID_TWICE` when two attempts complete, for a refund.
+- A late completion can also land while a new attempt is being created (Khalti's initiate is a
+  network round trip). The demo checks the order once more before sending the customer to the new
+  payment page; if it was paid meanwhile, the customer sees the order and the new payment expires
+  unused. A scheduled re-check goes through the same `verify()` and order update as a callback.
 - Two requests for one order can arrive together (double click, two tabs). The demo runs one payment
   start per order at a time and caps attempts per order (`maxAttempts`, default 10). With a database,
   the same guard is a row lock (`SELECT ... FOR UPDATE`) or a conditional update on the order.
@@ -212,7 +216,7 @@ Results include `raw`, the gateway's reply as received (Khalti amounts in paisa)
 
 | Suite | Command | Covers |
 |-|-|-|
-| Unit (382 tests) | `npm run check` | Signing and signature coverage, every status mapping, amount and paisa handling, URL and size limits, error mapping including stalled and broken replies, and in both demos: retries, double payment, simultaneous checkout requests, outages, forged callbacks and a Khalti start whose reply was lost |
+| Unit (384 tests) | `npm run check` | Signing and signature coverage, every status mapping, amount and paisa handling, URL and size limits, error mapping including stalled and broken replies, and in both demos: retries, double payment, simultaneous checkout requests, outages, forged callbacks and a Khalti start whose reply was lost |
 | Live sandbox | `npm run test:live` | Signed form accepted by eSewa, tampered signature rejected (`ES104`), reused id rejected, status lookups, Khalti initiate and lookup (with `KHALTI_SECRET_KEY`) |
 | CI | GitHub Actions | Build (including the Next.js demo), typecheck and unit tests on Node.js 22, 24 and 26 for every push |
 

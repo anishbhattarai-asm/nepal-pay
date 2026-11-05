@@ -156,6 +156,23 @@ describe('orders and payment attempts', () => {
     assert.equal(s.attempts.length, 1);
   });
 
+  it('shows the order, not a new payment, when an earlier attempt completes while the new one is created', async () => {
+    const order = await newOrder();
+    const first = await payEsewa(order);
+    gateway.initiateDelayMs = 150;
+    const starting = post(`/orders/${order}/pay/khalti`);
+    await sleep(50); // the start has re-verified the first attempt (still pending) and is waiting on Khalti
+    completed.add(first);
+    await fetch(`${base}/esewa/callback?data=${first}`); // the late completion lands mid-start
+
+    const res = await starting;
+    assert.equal(res.status, 303);
+    assert.equal(res.headers.get('location'), `/orders/${order}`);
+    const s = await status(order);
+    assert.equal(s.status, 'PAID');
+    assert.equal(s.attempts.length, 2); // the Khalti payment exists but was never shown, so it expires
+  });
+
   it('flags an order paid by two attempts so one can be refunded', async () => {
     const order = await newOrder();
     const esewaAttempt = await payEsewa(order);

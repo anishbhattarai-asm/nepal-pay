@@ -132,6 +132,7 @@ export function createApp({ esewa, khalti, baseUrl, maxOrders = 500, maxAttempts
         failureUrl: `${baseUrl}/esewa/failure/${attemptId}`,
       });
       addAttempt(order, 'esewa', result.reference);
+      if (order.status !== 'UNPAID') return res.redirect(303, `/orders/${order.id}`); // paid meanwhile, see below
       res.send(autoPostForm(result.action, result.fields));
     }),
   );
@@ -171,6 +172,9 @@ export function createApp({ esewa, khalti, baseUrl, maxOrders = 500, maxAttempts
         throw err;
       });
       addAttempt(order, 'khalti', result.reference); // the pidx
+      // A late callback for an earlier attempt can pay the order during this round trip. The new
+      // payment is then never shown, so it expires unpaid.
+      if (order.status !== 'UNPAID') return res.redirect(303, `/orders/${order.id}`);
       res.redirect(303, result.url);
     });
   });

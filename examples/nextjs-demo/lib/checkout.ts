@@ -124,6 +124,7 @@ export function createCheckout({ esewa, khalti, baseUrl, maxOrders = 500, maxAtt
           failureUrl: `${baseUrl}/esewa/failure/${attemptId}`,
         });
         addAttempt(order, 'esewa', form.reference);
+        if (paidMeanwhile(order)) return { kind: 'settled', order };
         return { kind: 'form', action: form.action, fields: form.fields };
       }
       const input = { amount: order.amount, orderId: attemptId, returnUrl: `${baseUrl}/khalti/callback`, productName: 'nepal-pay demo order' };
@@ -134,11 +135,18 @@ export function createCheckout({ esewa, khalti, baseUrl, maxOrders = 500, maxAtt
         throw err;
       });
       addAttempt(order, 'khalti', started.reference); // the pidx
+      if (paidMeanwhile(order)) return { kind: 'settled', order };
       return { kind: 'redirect', url: started.url };
     } finally {
       starting.delete(order.id);
     }
   }
+
+  /**
+   * A late callback for an earlier attempt can pay the order while a new attempt is being created
+   * (Khalti's initiate is a network round trip). The new payment is then never shown, so it expires unpaid.
+   */
+  const paidMeanwhile = (order: Order) => order.status !== 'UNPAID';
 
   /** eSewa return: the signed callback names the attempt, then the status API decides. */
   async function esewaReturned(data: string): Promise<Order | null> {

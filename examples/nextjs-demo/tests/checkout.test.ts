@@ -5,6 +5,8 @@ import { createCheckout, parseRupees, type CheckoutOptions } from '@/lib/checkou
 /** Gateways report COMPLETED only for references in this set. */
 const completed = new Set<string>();
 const gateway = { down: false };
+/** Runs inside the fake Khalti initiate(), while the new payment is being created. */
+const during: { initiate?: () => Promise<unknown> } = {};
 let pidxCount = 0;
 
 const outage = () =>
@@ -25,6 +27,7 @@ const esewa = {
 
 const khalti = {
   async initiate() {
+    await during.initiate?.();
     const pidx = `pidx-${++pidxCount}`;
     return { type: 'redirect', url: `https://khalti.test/${pidx}`, reference: pidx, raw: {} };
   },
@@ -49,6 +52,7 @@ async function startEsewa(shop: ReturnType<typeof open>, orderId: string) {
 beforeEach(() => {
   completed.clear();
   gateway.down = false;
+  during.initiate = undefined;
 });
 
 describe('parseRupees', () => {
@@ -103,6 +107,21 @@ describe('checkout', () => {
     const kinds = (await Promise.all([shop.startPayment(order.id, 'esewa'), shop.startPayment(order.id, 'esewa')])).map((r) => r.kind);
     expect(kinds.sort()).toEqual(['busy', 'form']);
     expect(order.attempts).toHaveLength(1);
+  });
+
+  it('shows the order, not a new payment, when an earlier attempt completes while the new one is created', async () => {
+    const shop = open();
+    const order = shop.createOrder(100);
+    const first = await startEsewa(shop, order.id);
+    during.initiate = async () => {
+      completed.add(first); // the customer finished the first payment after all
+      await shop.esewaReturned(first); // and its callback lands mid-start
+    };
+
+    const result = await shop.startPayment(order.id, 'khalti');
+    expect(result.kind).toBe('settled');
+    expect(order).toMatchObject({ status: 'PAID', paidBy: first });
+    expect(order.attempts).toHaveLength(2); // the Khalti payment exists but was never shown, so it expires
   });
 
   it('matches a Khalti return by the stored pidx, never by purchase_order_id', async () => {
