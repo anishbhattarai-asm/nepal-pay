@@ -11,6 +11,7 @@ jobs:
       - uses: actions/setup-node@v7
         with:
           node-version: ${{ matrix.node }}
+          check-latest: true # newest patch, even before the runner image has it
           cache: npm
       - run: npm ci
       - run: npm run build

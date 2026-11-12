@@ -12,6 +12,7 @@ jobs:
       - uses: actions/setup-node@v7
         with:
           node-version: 26
+          check-latest: true # newest patch, even before the runner image has it
           registry-url: https://registry.npmjs.org
       - run: npm ci
       - run: npm run check
